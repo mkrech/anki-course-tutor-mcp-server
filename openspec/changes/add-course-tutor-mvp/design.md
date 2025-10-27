@@ -5,7 +5,7 @@ Building an AI-powered learning system that combines Anki's spaced repetition wi
 **Stakeholders**: Students using Anki decks for learning, educators creating learning materials.
 
 **Constraints**:
-- Must use Python with uv/ruff tooling
+- Must use Python 3.13 with uv/ruff tooling
 - Chat-based interface via MCP (no GUI)
 - Local data storage (JSON/YAML)
 - Dependency on existing anki-mcp-server for Anki integration

@@ -4,7 +4,7 @@
 Build an AI-powered learning system that combines Anki's spaced repetition flashcards with engaging AI tutoring. The system imports existing Anki decks and provides a chat-based interface where an AI tutor with rotating personalities helps students learn more effectively through contextual explanations.
 
 ## Tech Stack
-- Python 3.10+
+- Python 3.13
 - uv (package manager and build tool)
 - ruff (linting and formatting)
 - FastMCP SDK for Python (AI integration)
