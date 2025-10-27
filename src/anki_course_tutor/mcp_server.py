@@ -162,14 +162,14 @@ async def resume_session(session_id: str) -> dict[str, Any]:
 
     try:
         # Load session
-        session = _session_manager.load(session_id)
+        session = _session_manager.load_session(session_id)
 
         # Check if can resume
         if session.status == SessionStatus.COMPLETED:
             return {"error": "Cannot resume completed session"}
 
         # Resume session
-        session = _session_manager.resume(session_id)
+        session = _session_manager.resume_session(session_id)
 
         # Import cards
         cards = await _anki_importer.import_deck(session.deck_name, session.chapter)
@@ -431,13 +431,13 @@ async def list_sessions() -> dict[str, Any]:
         return {
             "sessions": [
                 {
-                    "session_id": s.session_id,
-                    "deck_name": s.deck_name,
-                    "chapter": s.chapter,
-                    "mode": s.mode.value,
-                    "status": s.status.value,
-                    "created_at": s.created_at.isoformat(),
-                    "card_count": len(s.card_ids),
+                    "session_id": s["id"],  # SessionManager uses "id" not "session_id"
+                    "deck_name": s["deck_name"], 
+                    "chapter": s.get("chapter", ""),
+                    "mode": s["mode"],
+                    "status": s["status"],
+                    "created_at": s["created_at"],
+                    "card_count": s.get("total_cards", 0),
                 }
                 for s in sessions
             ],
