@@ -254,10 +254,14 @@ async def submit_answer(answer: str) -> dict[str, Any]:
 async def confirm_evaluation(is_correct: bool) -> dict[str, Any]:
     """Confirm or override the automatic evaluation.
 
-    After the system evaluates your answer, you can confirm if you agree or override it.
+    The system shows its evaluation of your answer. You need to confirm if this evaluation is correct.
+    
+    Examples:
+    - System says "INCORRECT" and you agree → is_correct: True (evaluation is right)
+    - System says "INCORRECT" but you think your answer was right → is_correct: False (evaluation is wrong)
 
     Args:
-        is_correct: True if you believe the answer was correct, False otherwise
+        is_correct: True if the system's evaluation is correct, False if you disagree with it
 
     Returns:
         Dictionary with next action (next card or explanation)

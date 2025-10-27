@@ -143,7 +143,7 @@ class LearningEngine:
             else:
                 return (f"Shiver me timbers! That be incorrect, ye scallywag! "
                        f"The right answer be '{answer}'. "
-                       f"Do ye agree with this here evaluation? (confirm with 'correct' or 'incorrect') 🏴‍☠️")
+                       f"→ Is this evaluation correct? (ja/nein) 🏴‍☠️")
         elif message_type == "next_card":
             return "Avast! Ready for the next treasure of knowledge, ye brave sailor? ⚓"
         return "Ahoy there, matey! ⚔️"
@@ -155,9 +155,12 @@ class LearningEngine:
         elif message_type == "evaluation":
             correct = kwargs.get("correct", False)
             answer = kwargs.get("answer", "")
-            return (f"I think this is {'CORRECT' if correct else 'INCORRECT'}. "
-                   f"The answer is '{answer}'. "
-                   f"Do you agree? (confirm with 'correct' or 'incorrect')")
+            if correct:
+                return (f"CORRECT! The answer is '{answer}'. "
+                       f"→ Is this evaluation correct? (ja/nein)")
+            else:
+                return (f"INCORRECT. The correct answer is '{answer}'. "
+                       f"→ Is this evaluation correct? (ja/nein)")
         elif message_type == "next_card":
             return "Ready for the next card."
         return "Let's continue learning."
