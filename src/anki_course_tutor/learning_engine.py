@@ -56,19 +56,85 @@ class AnswerEvaluator:
         )
 
     @staticmethod
+    def _normalize_math_expression(text: str) -> str:
+        """Normalize mathematical expressions for comparison.
+        
+        Converts common mathematical notation variations to a standard form.
+        
+        Args:
+            text: Input text that may contain mathematical expressions
+            
+        Returns:
+            Normalized text
+        """
+        text = text.strip().lower()
+        
+        # Replace superscript characters with ^ notation
+        superscript_map = {
+            '⁰': '^0', '¹': '^1', '²': '^2', '³': '^3', '⁴': '^4', 
+            '⁵': '^5', '⁶': '^6', '⁷': '^7', '⁸': '^8', '⁹': '^9',
+            'ⁿ': '^n', 'ᵃ': '^a', 'ᵇ': '^b', 'ᶜ': '^c', 'ᵈ': '^d',
+            'ᵉ': '^e', 'ᶠ': '^f', 'ᵍ': '^g', 'ʰ': '^h', 'ⁱ': '^i',
+            'ʲ': '^j', 'ᵏ': '^k', 'ˡ': '^l', 'ᵐ': '^m', 'ᵒ': '^o',
+            'ᵖ': '^p', 'ʳ': '^r', 'ˢ': '^s', 'ᵗ': '^t', 'ᵘ': '^u',
+            'ᵛ': '^v', 'ʷ': '^w', 'ˣ': '^x', 'ʸ': '^y', 'ᶻ': '^z'
+        }
+        
+        for superscript, replacement in superscript_map.items():
+            text = text.replace(superscript, replacement)
+        
+        # Normalize common mathematical symbols
+        text = text.replace('×', '*')
+        text = text.replace('·', '*')
+        text = text.replace('÷', '/')
+        
+        # Remove extra spaces around operators
+        import re
+        text = re.sub(r'\s*([+\-*/^=<>])\s*', r'\1', text)
+        
+        return text
+
+    @staticmethod
     def evaluate_cloze(user_answer: str, correct_answer: str) -> bool:
         """Evaluate Cloze card answer.
 
-        Uses same logic as Basic.
+        Supports multiple cloze deletions separated by commas.
+        Normalizes mathematical expressions for better matching.
+        
+        Examples:
+        - Single cloze: user="Paris", correct="Paris" -> True
+        - Multiple cloze: user="kⁿ-1, 1", correct="kⁿ-1, 1" -> True
+        - Multiple cloze: user="k^n-1,1", correct="kⁿ-1, 1" -> True (normalized)
 
         Args:
-            user_answer: User's answer
-            correct_answer: Correct answer from card
+            user_answer: User's answer (may contain multiple answers separated by commas)
+            correct_answer: Correct answer from card (may contain multiple answers)
 
         Returns:
             True if answers match
         """
-        return AnswerEvaluator.evaluate_basic(user_answer, correct_answer)
+        # Clean and split both answers by comma
+        user_parts = [part.strip() for part in user_answer.split(',')]
+        correct_parts = [part.strip() for part in correct_answer.split(',')]
+        
+        # Must have same number of parts
+        if len(user_parts) != len(correct_parts):
+            return False
+        
+        # Evaluate each part with mathematical normalization
+        for user_part, correct_part in zip(user_parts, correct_parts):
+            # First try basic evaluation
+            if AnswerEvaluator.evaluate_basic(user_part, correct_part):
+                continue
+            
+            # If basic fails, try with mathematical normalization
+            user_normalized = AnswerEvaluator._normalize_math_expression(user_part)
+            correct_normalized = AnswerEvaluator._normalize_math_expression(correct_part)
+            
+            if user_normalized != correct_normalized:
+                return False
+        
+        return True
 
     @staticmethod
     def evaluate_multiple_choice(user_answer: str, correct_answer: str) -> bool:

@@ -88,12 +88,74 @@ class TestAnswerEvaluator:
         result = AnswerEvaluator.evaluate_basic("Java", "Python")
         assert result is False
 
-    def test_evaluate_cloze(self):
-        """Test cloze card evaluation."""
+    def test_evaluate_cloze_single(self):
+        """Test single cloze card evaluation."""
         result = AnswerEvaluator.evaluate_cloze("Guido van Rossum", "Guido van Rossum")
         assert result is True
 
         result = AnswerEvaluator.evaluate_cloze("guido van rossum", "Guido van Rossum")
+        assert result is True
+
+        result = AnswerEvaluator.evaluate_cloze("wrong", "Guido van Rossum")
+        assert result is False
+
+    def test_evaluate_cloze_multiple(self):
+        """Test multiple cloze deletions."""
+        # Perfect match
+        result = AnswerEvaluator.evaluate_cloze("kⁿ-1, 1", "kⁿ-1, 1")
+        assert result is True
+
+        # Case insensitive and spacing variations
+        result = AnswerEvaluator.evaluate_cloze("k^n-1,1", "kⁿ-1, 1")
+        assert result is True  # Different Unicode but same meaning
+
+        result = AnswerEvaluator.evaluate_cloze("k^n-1 , 1 ", "kⁿ-1, 1")
+        assert result is True  # Extra spaces
+
+        # Wrong number of parts
+        result = AnswerEvaluator.evaluate_cloze("kⁿ-1", "kⁿ-1, 1")
+        assert result is False
+
+        result = AnswerEvaluator.evaluate_cloze("kⁿ-1, 1, 2", "kⁿ-1, 1")
+        assert result is False
+
+        # Wrong answers
+        result = AnswerEvaluator.evaluate_cloze("wrong, 1", "kⁿ-1, 1")
+        assert result is False
+
+        result = AnswerEvaluator.evaluate_cloze("kⁿ-1, wrong", "kⁿ-1, 1")
+        assert result is False
+
+    def test_evaluate_cloze_three_parts(self):
+        """Test cloze with three parts."""
+        result = AnswerEvaluator.evaluate_cloze("a, b, c", "a, b, c")
+        assert result is True
+
+        result = AnswerEvaluator.evaluate_cloze("A,B,C", "a, b, c")
+        assert result is True
+
+        result = AnswerEvaluator.evaluate_cloze("a, b, wrong", "a, b, c")
+        assert result is False
+
+    def test_evaluate_cloze_mathematical_expressions(self):
+        """Test cloze with mathematical expressions as in the user example."""
+        # User's example: Bei der Enumeration [...] Parameter, da [...] summieren müssen.
+        result = AnswerEvaluator.evaluate_cloze("kⁿ-1, 1", "kⁿ-1, 1")
+        assert result is True
+
+        # User types with normal characters
+        result = AnswerEvaluator.evaluate_cloze("k^n-1, 1", "kⁿ-1, 1")
+        assert result is True
+
+        # With spaces
+        result = AnswerEvaluator.evaluate_cloze("k^n - 1, 1", "kⁿ-1, 1")
+        assert result is True
+
+        # Different mathematical notations
+        result = AnswerEvaluator.evaluate_cloze("2², 4", "2^2, 4")
+        assert result is True
+
+        result = AnswerEvaluator.evaluate_cloze("x³ + y², z", "x^3+y^2, z")
         assert result is True
 
     def test_evaluate_multiple_choice(self):
