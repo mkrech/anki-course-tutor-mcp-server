@@ -63,8 +63,8 @@
 - [x] 8.7 Add MCP resources for deck and session metadata
 
 ## 9. Testing & Quality
-- [x] 9.1 Achieve 80% test coverage (achieved 74% with 102 passing tests)
-- [x] 9.2 Add end-to-end test with mock Anki and AI (created but disabled due to session manager filename bug)
+- [x] 9.1 Achieve 80% test coverage (achieved 74% with 105 passing tests)
+- [x] 9.2 Add end-to-end test with mock Anki and AI (3 E2E tests: explain mode, test mode, session resume)
 - [x] 9.3 Test error scenarios (Anki down, invalid data)
 - [x] 9.4 Run ruff linting and fix issues (all checks passed)
 - [x] 9.5 Test with real Anki deck (manual testing guide created in docs/MANUAL_TESTING.md)
