@@ -162,9 +162,9 @@ class TestLearningEngine:
         """Test confirming a correct evaluation."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
-        
+
         first_card_id = engine.current_card.id
-        
+
         engine.submit_answer("A programming language")
 
         result = engine.confirm_evaluation(is_correct=True)
@@ -173,7 +173,7 @@ class TestLearningEngine:
         assert result["state"] == "awaiting_answer"
         assert result["card_id"] == "card-2"
         assert len(engine.scheduler.completed_cards) == 1
-        
+
         # Should show result
         assert result["previous_result"] == "correct"
         assert result["previous_card_id"] == first_card_id
@@ -182,10 +182,10 @@ class TestLearningEngine:
         """Test confirming incorrect in EXPLAIN mode."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
-        
+
         # Record first card
         first_card_id = engine.current_card.id
-        
+
         engine.submit_answer("Wrong answer")
 
         result = engine.confirm_evaluation(is_correct=False)
@@ -204,18 +204,18 @@ class TestLearningEngine:
         """Test confirming incorrect in TEST mode shows result."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.TEST)
         engine.start()
-        
+
         # Record card ID before answer
         first_card_id = engine.current_card.id
         first_card_answer = engine.current_card.answer
-        
+
         engine.submit_answer("Wrong answer")
         result = engine.confirm_evaluation(is_correct=False)
 
         # Should move to next card and show result
         assert result["state"] == "awaiting_answer"
         assert result["card_id"] != first_card_id  # Moved to next card
-        
+
         # Should show result of previous card
         assert result["previous_result"] == "incorrect"
         assert result["previous_card_id"] == first_card_id
@@ -256,18 +256,18 @@ class TestLearningEngine:
         """Test moving to next card after explanation."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
-        
+
         # Record first card ID
         first_card_id = engine.current_card.id
-        
+
         engine.submit_answer("Wrong")
         engine.confirm_evaluation(is_correct=False)
-        
+
         # In EXPLAIN mode with incorrect answer, card is in retry queue
         # but current_card is still set for explanation context
         assert engine.session.state == LearningState.EXPLAINING
         assert engine.current_card.id == first_card_id
-        
+
         await engine.get_explanation()
 
         result = engine.next_card_after_explanation()
@@ -323,12 +323,12 @@ class TestLearningEngine:
         first_card_id = engine.current_card.id
         engine.submit_answer("Wrong")
         engine.confirm_evaluation(is_correct=False)
-        
+
         # Card is now in retry queue, but we continue with new cards first
         stats = engine.scheduler.get_stats()
         assert stats["retry_cards"] == 1
 
-        # Answer second card correctly  
+        # Answer second card correctly
         engine.submit_answer("Guido van Rossum")
         engine.confirm_evaluation(is_correct=True)
 

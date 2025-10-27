@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -110,7 +109,7 @@ class ProgressTracker:
                     logger.info("Restored from backup successfully")
                 except Exception as backup_e:
                     logger.error(f"Failed to load from backup: {backup_e}")
-                    raise ValueError(f"Both main and backup files are corrupted") from e
+                    raise ValueError("Both main and backup files are corrupted") from e
             else:
                 raise FileNotFoundError(f"Progress file not found: {file_path}") from e
 
@@ -153,7 +152,7 @@ class ProgressTracker:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
 
         # Validate required fields

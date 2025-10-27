@@ -86,11 +86,11 @@ class TestSimpleLearningScheduler:
         # Next card should be from new queue (card-2), not retry queue
         next_card = scheduler.get_next_card()
         assert next_card.id == "card-2"
-        
+
         # After all new cards, should get retry card
         card3 = scheduler.get_next_card()
         assert card3.id == "card-3"
-        
+
         # Now retry card should come
         retry_card = scheduler.get_next_card()
         assert retry_card.id == "card-1"

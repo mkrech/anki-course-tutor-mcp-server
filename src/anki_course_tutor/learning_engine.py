@@ -138,9 +138,7 @@ class LearningEngine:
             Dictionary with evaluation result for user review
         """
         if self.session.state != LearningState.AWAITING_ANSWER:
-            return {
-                "error": f"Cannot submit answer in state {self.session.state.value}"
-            }
+            return {"error": f"Cannot submit answer in state {self.session.state.value}"}
 
         if not self.current_card:
             return {"error": "No current card"}
@@ -179,9 +177,7 @@ class LearningEngine:
             Dictionary with next action (explanation or next card)
         """
         if self.session.state != LearningState.AWAITING_REVIEW:
-            return {
-                "error": f"Cannot confirm evaluation in state {self.session.state.value}"
-            }
+            return {"error": f"Cannot confirm evaluation in state {self.session.state.value}"}
 
         if not self.current_card:
             return {"error": "No current card"}
@@ -217,13 +213,13 @@ class LearningEngine:
 
         # In TEST mode or correct answer, move to next card but show result
         next_card_result = self._next_card()
-        
+
         # Add result information for user feedback
         next_card_result["previous_result"] = "correct" if is_correct else "incorrect"
         next_card_result["previous_card_id"] = previous_card_id
         if not is_correct:
             next_card_result["previous_correct_answer"] = previous_answer
-        
+
         return next_card_result
 
     async def get_explanation(self) -> dict[str, Any]:
@@ -233,9 +229,7 @@ class LearningEngine:
             Dictionary with AI-generated explanation
         """
         if self.session.state != LearningState.EXPLAINING:
-            return {
-                "error": f"Cannot get explanation in state {self.session.state.value}"
-            }
+            return {"error": f"Cannot get explanation in state {self.session.state.value}"}
 
         if not self.current_card:
             return {"error": "No current card"}
@@ -273,9 +267,7 @@ class LearningEngine:
             Dictionary with next card or completion
         """
         if self.session.state != LearningState.EXPLAINING:
-            return {
-                "error": f"Cannot move to next card from state {self.session.state.value}"
-            }
+            return {"error": f"Cannot move to next card from state {self.session.state.value}"}
 
         return self._next_card()
 

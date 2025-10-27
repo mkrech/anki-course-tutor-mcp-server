@@ -2,7 +2,6 @@
 
 import logging
 from collections import deque
-from typing import Deque
 
 from anki_course_tutor.models import Card
 
@@ -18,8 +17,8 @@ class SimpleLearningScheduler:
         Args:
             cards: List of cards to schedule
         """
-        self.new_queue: Deque[Card] = deque(cards)
-        self.retry_queue: Deque[Card] = deque()
+        self.new_queue: deque[Card] = deque(cards)
+        self.retry_queue: deque[Card] = deque()
         self.completed_cards: list[Card] = []
 
         logger.info(f"Initialized scheduler with {len(cards)} cards")
@@ -85,9 +84,7 @@ class SimpleLearningScheduler:
             "new_cards": len(self.new_queue),
             "retry_cards": len(self.retry_queue),
             "completed_cards": len(self.completed_cards),
-            "total_cards": len(self.new_queue)
-            + len(self.retry_queue)
-            + len(self.completed_cards),
+            "total_cards": len(self.new_queue) + len(self.retry_queue) + len(self.completed_cards),
         }
 
     def peek_next(self) -> Card | None:

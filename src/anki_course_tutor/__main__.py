@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from anki_course_tutor.config import ConfigLoader
+from anki_course_tutor.mcp_server import run_server
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +31,10 @@ def main():
         Path(config.storage.sessions_dir).mkdir(parents=True, exist_ok=True)
         Path(config.storage.progress_dir).mkdir(parents=True, exist_ok=True)
 
-        # TODO: Initialize and run MCP server (Task 8)
-        logger.info("MCP server ready (tools not yet implemented)")
-        logger.info("Press Ctrl+C to stop")
+        logger.info("Starting MCP server...")
 
-        # Keep server running
-        import time
-
-        while True:
-            time.sleep(1)
+        # Run MCP server
+        run_server()
 
     except FileNotFoundError as e:
         logger.error(f"Configuration error: {e}")

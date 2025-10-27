@@ -128,12 +128,12 @@ class TestProgressTracker:
         assert backup_path.exists()
 
         # Verify backup contains old data
-        with open(backup_path, "r") as f:
+        with open(backup_path) as f:
             backup_data = json.load(f)
         assert backup_data["statistics"]["completed_cards"] == 2  # Old value
 
         # Main file has new data
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             main_data = json.load(f)
         assert main_data["statistics"]["completed_cards"] == 3  # New value
 

@@ -1,7 +1,5 @@
 """Tests for AI Tutor with personality rotation."""
 
-from unittest.mock import AsyncMock
-
 import pytest
 
 from anki_course_tutor.ai_tutor import AITutor, Personality, PersonalityRotation
@@ -53,12 +51,12 @@ class TestPersonalityRotation:
         rotation = PersonalityRotation(0)
 
         # First cycle: N, N, N, P
-        for i in range(3):
+        for _ in range(3):
             assert rotation.get_next_personality() == Personality.NORMAL
         assert rotation.get_next_personality() == Personality.PIRATE
 
         # Second cycle: N, N, N, P
-        for i in range(3):
+        for _ in range(3):
             assert rotation.get_next_personality() == Personality.NORMAL
         assert rotation.get_next_personality() == Personality.PIRATE
 
