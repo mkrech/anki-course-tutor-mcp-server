@@ -4,12 +4,101 @@ import logging
 import re
 from typing import Any
 
-from anki_mcp_server.client import AnkiClient, AnkiConnectError
+import httpx
 
 from anki_course_tutor.config import AnkiConfig
 from anki_course_tutor.models import Card, CardType
 
 logger = logging.getLogger(__name__)
+
+
+class AnkiConnectError(Exception):
+    """Error communicating with AnkiConnect."""
+
+    pass
+
+
+class AnkiClient:
+    """Simple AnkiConnect client."""
+
+    def __init__(self, url: str = "http://localhost:8765"):
+        """Initialize AnkiConnect client.
+
+        Args:
+            url: AnkiConnect API URL
+        """
+        self.url = url
+
+    async def invoke(self, action: str, **params) -> Any:
+        """Invoke AnkiConnect action.
+
+        Args:
+            action: AnkiConnect action name
+            **params: Action parameters
+
+        Returns:
+            Action result
+
+        Raises:
+            AnkiConnectError: If request fails
+        """
+        payload = {"action": action, "version": 6, "params": params}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(self.url, json=payload, timeout=10.0)
+                response.raise_for_status()
+                result = response.json()
+
+                if "error" in result and result["error"] is not None:
+                    raise AnkiConnectError(f"AnkiConnect error: {result['error']}")
+
+                return result.get("result")
+
+            except httpx.HTTPError as e:
+                raise AnkiConnectError(f"HTTP error: {e}") from e
+
+    async def check_connection(self) -> bool:
+        """Check if AnkiConnect is available.
+        
+        Returns:
+            True if connection successful
+        """
+        try:
+            await self.invoke("version")
+            return True
+        except AnkiConnectError:
+            return False
+
+    async def get_deck_names(self) -> list[str]:
+        """Get list of deck names.
+        
+        Returns:
+            List of deck names
+        """
+        return await self.invoke("deckNames")
+
+    async def find_notes(self, query: str) -> list[int]:
+        """Find notes matching query.
+        
+        Args:
+            query: Search query
+            
+        Returns:
+            List of note IDs
+        """
+        return await self.invoke("findNotes", query=query)
+
+    async def notes_info(self, note_ids: list[int]) -> list[dict[str, Any]]:
+        """Get information about notes.
+        
+        Args:
+            note_ids: List of note IDs
+            
+        Returns:
+            List of note information dictionaries
+        """
+        return await self.invoke("notesInfo", notes=note_ids)
 
 
 class CardConverter:
@@ -185,10 +274,7 @@ class AnkiDeckImporter:
             config: Anki configuration with connection settings
         """
         self.config = config
-        self.client = AnkiClient(
-            url=config.connect_url,
-            timeout=config.connect_timeout,
-        )
+        self.client = AnkiClient(url=config.connect_url)
 
     async def check_connection(self) -> bool:
         """Verify Anki is running and AnkiConnect is available.

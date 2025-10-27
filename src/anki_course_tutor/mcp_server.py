@@ -122,7 +122,8 @@ async def start_session(deck_name: str, chapter: str = "", mode: str = "explain"
         # Create session
         session = _session_manager.create_session(deck_name, chapter, learning_mode)
         session.card_ids = [card.id for card in cards]
-        _session_manager.save(session)
+                # Save session
+        _session_manager.save_session(session)
 
         # Initialize learning engine
         _learning_engine = LearningEngine(session, cards, learning_mode)
@@ -268,7 +269,7 @@ async def confirm_evaluation(is_correct: bool) -> dict[str, Any]:
         result = _learning_engine.confirm_evaluation(is_correct)
 
         # Update session
-        _session_manager.save(_active_session)
+        _session_manager.save_session(_active_session)
 
         logger.info(f"Evaluation confirmed: {is_correct}, next state: {result.get('state')}")
         return result
@@ -294,7 +295,7 @@ async def get_explanation() -> dict[str, Any]:
         result = await _learning_engine.get_explanation()
 
         # Update session with new personality count
-        _session_manager.save(_active_session)
+        _session_manager.save_session(_active_session)
 
         logger.info(
             f"Generated explanation with personality: {result.get('personality', 'unknown')}"
@@ -388,7 +389,7 @@ async def end_session() -> dict[str, Any]:
         # Mark session complete
         _active_session.status = SessionStatus.COMPLETED
         _active_session.state = LearningState.SESSION_COMPLETE
-        _session_manager.save(_active_session)
+        _session_manager.save_session(_active_session)
 
         session_id = _active_session.session_id
         final_stats = {
