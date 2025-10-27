@@ -19,7 +19,7 @@ class Personality(Enum):
 
 
 class PersonalityRotation:
-    """Manages rotation between tutor personalities (3 normal : 1 pirate)."""
+    """Manages rotation between tutor personalities (2 normal : 1 pirate)."""
 
     def __init__(self, current_count: int = 0):
         """Initialize personality rotation.
@@ -33,7 +33,7 @@ class PersonalityRotation:
     def get_next_personality(self) -> Personality:
         """Get next personality based on rotation pattern.
 
-        Rotation: Normal, Normal, Normal, Pirate, repeat...
+        Rotation: Normal, Normal, Pirate, repeat...
 
         Returns:
             Next personality to use
@@ -41,8 +41,8 @@ class PersonalityRotation:
         # Increment count
         self.count += 1
 
-        # Every 4th explanation is pirate (positions 4, 8, 12, ...)
-        if self.count % 4 == 0:
+        # Every 3rd explanation is pirate (positions 3, 6, 9, ...)
+        if self.count % 3 == 0:
             personality = Personality.PIRATE
             logger.info(f"Explanation #{self.count}: Using PIRATE personality")
         else:

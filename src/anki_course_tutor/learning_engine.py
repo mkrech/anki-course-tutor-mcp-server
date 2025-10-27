@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from anki_course_tutor.ai_tutor import AITutor
+from anki_course_tutor.ai_tutor import AITutor, Personality
 from anki_course_tutor.models import (
     Card,
     CardProgress,
@@ -105,11 +105,62 @@ class LearningEngine:
         self.automatic_evaluation: bool | None = None
         self.evaluator = AnswerEvaluator()
         self.ai_tutor = AITutor(session.personality_count)
+        
+        # Track current personality for complete learning cycles
+        self.current_personality = self.ai_tutor.rotation.get_next_personality()
 
         logger.info(
             f"Initialized learning engine for session {session.session_id} "
-            f"with {len(cards)} cards in {mode.value} mode"
+            f"with {len(cards)} cards in {mode.value} mode, "
+            f"starting with {self.current_personality.value} personality"
         )
+
+    def _get_personality_message(self, message_type: str, **kwargs) -> str:
+        """Get personality-appropriate message.
+        
+        Args:
+            message_type: Type of message (card_presentation, evaluation, etc.)
+            **kwargs: Message parameters
+            
+        Returns:
+            Formatted message in current personality style
+        """
+        if self.current_personality == Personality.PIRATE:
+            return self._get_pirate_message(message_type, **kwargs)
+        else:
+            return self._get_normal_message(message_type, **kwargs)
+    
+    def _get_pirate_message(self, message_type: str, **kwargs) -> str:
+        """Get pirate-style message."""
+        if message_type == "card_presentation":
+            return f"Ahoy matey! Here be yer next question, ye landlubber! ⚔️"
+        elif message_type == "evaluation":
+            correct = kwargs.get("correct", False)
+            answer = kwargs.get("answer", "")
+            if correct:
+                return (f"Arrr! That be correct, ye savvy sailor! "
+                       f"The answer be '{answer}'. Well done, matey! ⚔️")
+            else:
+                return (f"Shiver me timbers! That be incorrect, ye scallywag! "
+                       f"The right answer be '{answer}'. "
+                       f"Do ye agree with this here evaluation? (confirm with 'correct' or 'incorrect') 🏴‍☠️")
+        elif message_type == "next_card":
+            return "Avast! Ready for the next treasure of knowledge, ye brave sailor? ⚓"
+        return "Ahoy there, matey! ⚔️"
+    
+    def _get_normal_message(self, message_type: str, **kwargs) -> str:
+        """Get normal-style message."""
+        if message_type == "card_presentation":
+            return "Here's your next question:"
+        elif message_type == "evaluation":
+            correct = kwargs.get("correct", False)
+            answer = kwargs.get("answer", "")
+            return (f"I think this is {'CORRECT' if correct else 'INCORRECT'}. "
+                   f"The answer is '{answer}'. "
+                   f"Do you agree? (confirm with 'correct' or 'incorrect')")
+        elif message_type == "next_card":
+            return "Ready for the next card."
+        return "Let's continue learning."
 
     def start(self) -> dict[str, Any]:
         """Start the learning session.
@@ -160,10 +211,10 @@ class LearningEngine:
             "state": "awaiting_review",
             "automatic_evaluation": self.automatic_evaluation,
             "correct_answer": self.current_card.answer,
-            "message": (
-                f"I think this is {'CORRECT' if self.automatic_evaluation else 'INCORRECT'}. "
-                f"The answer is '{self.current_card.answer}'. "
-                f"Do you agree? (confirm with 'correct' or 'incorrect')"
+            "message": self._get_personality_message(
+                "evaluation", 
+                correct=self.automatic_evaluation, 
+                answer=self.current_card.answer
             ),
         }
 
@@ -288,6 +339,8 @@ class LearningEngine:
             "card_id": self.current_card.id,
             "card_type": self.current_card.type.value,
             "question": self.current_card.question,
+            "personality": self.current_personality.value,
+            "message": self._get_personality_message("card_presentation"),
         }
 
         # Add options for multiple choice
@@ -360,6 +413,9 @@ class LearningEngine:
         Returns:
             Dictionary with next card presentation or completion
         """
+        # Get next personality for the new card
+        self.current_personality = self.ai_tutor.rotation.get_next_personality()
+        
         self.current_card = self.scheduler.get_next_card()
         self.current_user_answer = None
         self.automatic_evaluation = None
@@ -375,6 +431,7 @@ class LearningEngine:
             }
 
         self.session.state = LearningState.PRESENTING_CARD
+        logger.info(f"Moving to next card {self.current_card.id} with {self.current_personality.value} personality")
         return self._present_card()
 
     def get_current_state(self) -> dict[str, Any]:
