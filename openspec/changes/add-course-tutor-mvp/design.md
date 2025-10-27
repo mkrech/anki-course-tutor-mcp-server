@@ -36,10 +36,12 @@ Use standard Python package with `src/` layout mirroring anki-mcp-server:
 ```
 anki-course-tutor-mcp-server/
 ├── pyproject.toml
+├── config.yaml                   # Configuration file
 ├── src/
 │   └── anki_course_tutor/
 │       ├── __init__.py
 │       ├── __main__.py           # MCP server entry point
+│       ├── config.py             # YAML configuration loader
 │       ├── server.py             # MCP server and tools
 │       ├── session.py            # Session management
 │       ├── learning.py           # Learning loop logic
@@ -66,7 +68,105 @@ anki-course-tutor-mcp-server/
 - Flat structure: Rejected due to complexity
 - Monolithic file: Rejected for maintainability
 
-### Decision 2: Anki Integration Strategy
+### Decision 2: YAML Configuration
+Use YAML for runtime configuration to allow users to customize behavior without code changes.
+
+**Why**:
+- User-friendly syntax (easier than JSON for humans)
+- Supports comments for documentation
+- Standard for configuration files
+- Easy to extend
+
+**Configuration Structure**:
+```yaml
+# config.yaml
+anki:
+  connect_url: "http://localhost:8765"
+  connect_timeout: 30
+  retry_attempts: 3
+
+tutor:
+  personalities:
+    - type: "normal"
+      weight: 3
+    - type: "pirate"
+      weight: 1
+  
+  modes:
+    explain:
+      enabled: true
+      max_sentences: 5
+    test:
+      enabled: true
+      show_correct_answer: true
+
+learning:
+  simple_srs:
+    retry_incorrect: true
+    shuffle_cards: false
+  
+  evaluation:
+    case_sensitive: false
+    whitespace_sensitive: false
+    require_user_review: true
+
+storage:
+  data_dir: "./data"
+  sessions_dir: "./data/sessions"
+  progress_dir: "./data/progress"
+  backup_enabled: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+```
+
+**Implementation**:
+```python
+from dataclasses import dataclass
+import yaml
+from pathlib import Path
+
+@dataclass
+class AnkiConfig:
+    connect_url: str
+    connect_timeout: int
+    retry_attempts: int
+
+@dataclass
+class TutorConfig:
+    personalities: list[dict]
+    modes: dict
+
+@dataclass
+class Config:
+    anki: AnkiConfig
+    tutor: TutorConfig
+    learning: dict
+    storage: dict
+    logging: dict
+
+class ConfigLoader:
+    @staticmethod
+    def load(config_path: Path = Path("config.yaml")) -> Config:
+        """Load and validate YAML configuration."""
+        with open(config_path) as f:
+            data = yaml.safe_load(f)
+        return Config(
+            anki=AnkiConfig(**data["anki"]),
+            tutor=TutorConfig(**data["tutor"]),
+            learning=data["learning"],
+            storage=data["storage"],
+            logging=data["logging"]
+        )
+```
+
+**Alternatives considered**:
+- Environment variables only: Rejected - too many settings
+- JSON config: Rejected - less human-friendly than YAML
+- TOML config: Considered but YAML more familiar to users
+
+### Decision 3: Anki Integration Strategy
 Reuse existing anki-mcp-server as a library dependency rather than duplicating AnkiConnect logic.
 
 **Why**:
@@ -90,7 +190,7 @@ class AnkiDeckImporter:
         return [self._note_to_card(note) for note in notes_info]
 ```
 
-### Decision 3: AI Tutor Architecture
+### Decision 4: AI Tutor Architecture
 Use FastMCP for model-agnostic AI integration with personality system as a rotation layer.
 
 **Why**:
@@ -133,7 +233,49 @@ class PersonalityRotation:
         return personality
 ```
 
-### Decision 4: Learning Loop State Machine
+### Decision 4: AI Tutor Architecture
+Use FastMCP for model-agnostic AI integration with personality system as a rotation layer.
+
+**Why**:
+- Model flexibility (works with any MCP-compatible AI)
+- Personality rotation is presentation concern, not AI concern
+- Simple stateful rotation counter
+- Easy to extend personalities without changing AI logic
+
+**Implementation**:
+```python
+class AITutor:
+    def __init__(self, mode: LearningMode, config: TutorConfig):
+        self.mode = mode
+        self.config = config
+        self.personality_rotation = PersonalityRotation(config.personalities)
+    
+    async def get_explanation(self, card: Card, user_answer: str) -> str:
+        """Get AI explanation based on current mode and personality."""
+        if self.mode == LearningMode.TEST:
+            return ""  # No explanations in test mode
+        
+        personality = self.personality_rotation.next()
+        prompt = self._build_prompt(card, user_answer, personality)
+        response = await self._call_mcp(prompt)
+        return self._limit_sentences(response, max_sentences=self.config.modes["explain"]["max_sentences"])
+
+class PersonalityRotation:
+    """Configurable personality rotation from YAML."""
+    def __init__(self, personalities: list[dict]):
+        self.count = 0
+        self.personalities = []
+        for p in personalities:
+            # Repeat each personality by its weight
+            self.personalities.extend([p["type"]] * p["weight"])
+    
+    def next(self) -> Personality:
+        personality = self.personalities[self.count % len(self.personalities)]
+        self.count += 1
+        return Personality(personality)
+```
+
+### Decision 5: Learning Loop State Machine
 Implement learning as a state machine with clear states and transitions.
 
 **Why**:
@@ -166,7 +308,7 @@ NOT_STARTED → PRESENTING_CARD → AWAITING_ANSWER → EVALUATING
                                 (next card or SESSION_COMPLETE)
 ```
 
-### Decision 5: Progress Persistence Format
+### Decision 6: Progress Persistence Format
 Use JSON files for progress tracking with human-readable structure.
 
 **Why**:
@@ -203,7 +345,7 @@ Use JSON files for progress tracking with human-readable structure.
 }
 ```
 
-### Decision 6: Card Type Abstraction
+### Decision 7: Card Type Abstraction
 Create unified Card interface that normalizes different Anki note types.
 
 **Why**:
@@ -236,7 +378,7 @@ class CardConverter:
         # ... more types
 ```
 
-### Decision 7: Simple Spaced Repetition for MVP
+### Decision 8: Simple Spaced Repetition for MVP
 Track correct/incorrect per card and retry incorrect cards at session end.
 
 **Why**:

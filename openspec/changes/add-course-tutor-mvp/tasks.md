@@ -1,9 +1,11 @@
 ## 1. Project Setup
-- [ ] 1.1 Create pyproject.toml with dependencies (fastmcp, anki-mcp-server, httpx)
+- [ ] 1.1 Create pyproject.toml with dependencies (fastmcp, anki-mcp-server, httpx, pyyaml)
 - [ ] 1.2 Set up src/ directory structure with modules
 - [ ] 1.3 Configure ruff and pytest settings
 - [ ] 1.4 Create data/ directories for sessions and progress
-- [ ] 1.5 Add MCP server entry point in __main__.py
+- [ ] 1.5 Create default config.yaml with tunable settings
+- [ ] 1.6 Implement ConfigLoader for YAML configuration
+- [ ] 1.7 Add MCP server entry point in __main__.py
 
 ## 2. Data Models
 - [ ] 2.1 Implement Card model with support for Basic, Cloze, Multiple Choice
