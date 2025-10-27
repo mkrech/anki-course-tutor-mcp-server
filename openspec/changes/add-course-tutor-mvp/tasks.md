@@ -70,11 +70,11 @@
 - [x] 9.5 Test with real Anki deck (manual testing guide created in docs/MANUAL_TESTING.md)
 
 ## 10. Documentation
-- [ ] 10.1 Write README with setup instructions
-- [ ] 10.2 Add usage examples for chat-based learning workflows
-- [ ] 10.3 Document MCP server configuration for Claude Desktop
-- [ ] 10.4 Add troubleshooting section
-- [ ] 10.5 Create CONTRIBUTING guide
+- [x] 10.1 Write README with setup instructions
+- [x] 10.2 Add usage examples for chat-based learning workflows
+- [x] 10.3 Document MCP server configuration for Claude Desktop
+- [x] 10.4 Add troubleshooting section
+- [x] 10.5 Create CONTRIBUTING guide
 
 ## Dependencies
 - 3.1-3.5 must complete before 4.1 (session needs cards)
