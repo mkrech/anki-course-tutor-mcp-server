@@ -234,20 +234,25 @@ class TestLearningEngine:
         assert result["state"] == "explaining"
         assert len(engine.scheduler.retry_queue) == 1
 
-    def test_get_explanation(self, sample_session, sample_cards):
+    @pytest.mark.asyncio
+    async def test_get_explanation(self, sample_session, sample_cards):
         """Test getting explanation."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
         engine.submit_answer("Wrong")
         engine.confirm_evaluation(is_correct=False)
 
-        result = engine.get_explanation()
+        result = await engine.get_explanation()
 
         assert result["state"] == "explaining"
-        assert "card_question" in result
-        assert "card_answer" in result
+        assert "explanation" in result
+        assert "personality" in result
+        assert result["card_id"] == sample_cards[0].id
+        # Should increment personality count
+        assert engine.session.personality_count == 1
 
-    def test_next_card_after_explanation(self, sample_session, sample_cards):
+    @pytest.mark.asyncio
+    async def test_next_card_after_explanation(self, sample_session, sample_cards):
         """Test moving to next card after explanation."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
@@ -263,7 +268,7 @@ class TestLearningEngine:
         assert engine.session.state == LearningState.EXPLAINING
         assert engine.current_card.id == first_card_id
         
-        engine.get_explanation()
+        await engine.get_explanation()
 
         result = engine.next_card_after_explanation()
 

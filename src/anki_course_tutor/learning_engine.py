@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from anki_course_tutor.ai_tutor import AITutor
 from anki_course_tutor.models import (
     Card,
     CardProgress,
@@ -103,6 +104,7 @@ class LearningEngine:
         self.current_user_answer: str | None = None
         self.automatic_evaluation: bool | None = None
         self.evaluator = AnswerEvaluator()
+        self.ai_tutor = AITutor(session.personality_count)
 
         logger.info(
             f"Initialized learning engine for session {session.session_id} "
@@ -224,11 +226,11 @@ class LearningEngine:
         
         return next_card_result
 
-    def get_explanation(self) -> dict[str, Any]:
-        """Request explanation (to be filled by AI tutor).
+    async def get_explanation(self) -> dict[str, Any]:
+        """Request AI explanation for incorrect answer.
 
         Returns:
-            Dictionary with explanation placeholder
+            Dictionary with AI-generated explanation
         """
         if self.session.state != LearningState.EXPLAINING:
             return {
@@ -238,12 +240,30 @@ class LearningEngine:
         if not self.current_card:
             return {"error": "No current card"}
 
-        # This will be enhanced by AI tutor
+        if not self.current_user_answer:
+            return {"error": "No user answer recorded"}
+
+        # Generate AI explanation
+        result = await self.ai_tutor.generate_explanation(
+            card=self.current_card,
+            user_answer=self.current_user_answer,
+            correct_answer=self.current_card.answer,
+            mode=self.mode,
+        )
+
+        # Update session personality count
+        self.session.personality_count = self.ai_tutor.get_current_count()
+
+        logger.info(
+            f"Generated {result['personality']} explanation for card {self.current_card.id}"
+        )
+
         return {
             "state": "explaining",
-            "card_question": self.current_card.question,
-            "card_answer": self.current_card.answer,
-            "message": "Explanation will be provided by AI tutor",
+            "card_id": self.current_card.id,
+            "explanation": result["explanation"],
+            "personality": result["personality"],
+            "message": "Ready to continue. Call next_card_after_explanation.",
         }
 
     def next_card_after_explanation(self) -> dict[str, Any]:
