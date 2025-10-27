@@ -106,8 +106,8 @@ class LearningEngine:
         self.evaluator = AnswerEvaluator()
         self.ai_tutor = AITutor(session.personality_count)
         
-        # Track current personality for complete learning cycles
-        self.current_personality = self.ai_tutor.rotation.get_next_personality()
+        # Track current personality for complete learning cycles (peek without incrementing)
+        self.current_personality = self.ai_tutor.rotation.peek_next_personality()
 
         logger.info(
             f"Initialized learning engine for session {session.session_id} "
@@ -144,6 +144,10 @@ class LearningEngine:
                 return (f"Shiver me timbers! That be incorrect, ye scallywag! "
                        f"The right answer be '{answer}'. "
                        f"→ Is this evaluation correct? (ja/nein) 🏴‍☠️")
+        elif message_type == "ready_for_explanation":
+            answer = kwargs.get("answer", "")
+            return (f"Arrr! Yer answer be incorrect, matey! The right answer be '{answer}'. "
+                   f"→ Request an explanation to learn why, or move to the next card. 🏴‍☠️")
         elif message_type == "next_card":
             return "Avast! Ready for the next treasure of knowledge, ye brave sailor? ⚓"
         return "Ahoy there, matey! ⚔️"
@@ -161,6 +165,10 @@ class LearningEngine:
             else:
                 return (f"INCORRECT. The correct answer is '{answer}'. "
                        f"→ Is this evaluation correct? (ja/nein)")
+        elif message_type == "ready_for_explanation":
+            answer = kwargs.get("answer", "")
+            return (f"Your answer was incorrect. The correct answer is '{answer}'. "
+                   f"→ Request an explanation to understand why, or continue to the next card.")
         elif message_type == "next_card":
             return "Ready for the next card."
         return "Let's continue learning."
@@ -262,7 +270,10 @@ class LearningEngine:
                 "result": "incorrect",
                 "card_id": self.current_card.id,
                 "correct_answer": previous_answer,
-                "message": "Ready for explanation. Request explanation to continue.",
+                "message": self._get_personality_message(
+                    "ready_for_explanation",
+                    answer=previous_answer
+                ),
             }
 
         # In TEST mode or correct answer, move to next card but show result

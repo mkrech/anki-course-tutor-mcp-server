@@ -30,6 +30,19 @@ class PersonalityRotation:
         self.count = current_count
         logger.debug(f"Initialized PersonalityRotation with count={current_count}")
 
+    def peek_next_personality(self) -> Personality:
+        """Peek at what the next personality will be WITHOUT incrementing count.
+
+        Returns:
+            What personality will be used for the next explanation
+        """
+        next_count = self.count + 1
+        # Every 3rd explanation is pirate (positions 3, 6, 9, ...)
+        if next_count % 3 == 0:
+            return Personality.PIRATE
+        else:
+            return Personality.NORMAL
+
     def get_next_personality(self) -> Personality:
         """Get next personality based on rotation pattern.
 
