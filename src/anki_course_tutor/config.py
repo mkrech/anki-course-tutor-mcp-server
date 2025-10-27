@@ -17,6 +17,7 @@ class AnkiConfig:
     connect_url: str
     connect_timeout: int
     retry_attempts: int
+    use_anki_scheduler: bool = True  # Enable Anki scheduler integration by default
 
 
 @dataclass

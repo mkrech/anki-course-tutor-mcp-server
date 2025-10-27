@@ -128,25 +128,31 @@ except AnkiConnectError as e:
 
 ### 4. Session State Simplification
 
+
 **Question**: What session state is still needed?
 
-**Current State** (with SimpleLearningScheduler):
+**Implemented State** (session-based card management):
 ```python
 @dataclass
 class Session:
-    card_ids: list[str]
-    current_card_index: int
-    # ... scheduler state
+    card_ids: list[str]  # All cards in session
+    current_card_index: int  # Index of current card being presented
+    retry_queue: list[str]  # Card IDs to retry (incorrect answers)
+    card_progress: dict[str, CardProgress]  # Track attempts/results
+    # Anki handles: intervals, due dates, ease factors (long-term SRS)
 ```
 
-**New State** (with Anki scheduler):
+**LearningEngine State** (in-memory):
 ```python
-@dataclass
-class Session:
-    card_ids: list[str]  # Still needed for card order
-    current_card_index: int  # Track progress in session
-    # Anki handles: intervals, due dates, ease factors
+class LearningEngine:
+    _cards: list[Card]  # All cards (sorted once at start)
+    _current_index: int  # Next card to fetch from _cards
+    _retry_queue: deque[str]  # In-memory retry queue
+    _card_map: dict[str, Card]  # Fast lookup by card ID
 ```
+
+**Architecture Decision**: Removed SimpleLearningScheduler in favor of direct session-based card management. Card iteration logic integrated into LearningEngine for simpler architecture with Anki as single source of truth for scheduling.
+````
 
 **Rationale**:
 - ✅ Anki is source of truth for scheduling
@@ -361,16 +367,27 @@ async def test_review_submits_to_anki(anki_mock):
 ## Alternatives Considered
 
 ### Alternative 1: Keep SimpleLearningScheduler as Fallback
-**Pros**: Offline support  
-**Cons**: Complexity, data sync issues  
-**Decision**: Rejected - YAGNI, adds complexity
+**Pros**: Offline support, modular separation  
+**Cons**: Complexity, extra layer, 109 lines of code  
+**Decision**: ~~Rejected~~ → **Accepted initially**, then **Removed in final implementation**  
+**Rationale**: After implementation, decided to simplify by removing SimpleLearningScheduler. Card management integrated directly into LearningEngine using session state. Anki is single source of truth for scheduling. Resulted in cleaner architecture with -109 lines of code.
 
 ### Alternative 2: Implement Our Own SM-2
 **Pros**: Full control, offline capable  
 **Cons**: Reinventing wheel, no AnkiWeb sync  
 **Decision**: Rejected - Anki's is proven
 
-### Alternative 3: Hybrid (Queue + Sync)
+### Alternative 3: Session-Based Card Management (IMPLEMENTED)
+**Pros**: Simpler architecture, less code, Anki as single authority  
+**Cons**: Slightly more dependent on Anki integration  
+**Decision**: **Accepted** - Best balance of simplicity and functionality
+- Card iteration in LearningEngine (`_cards` list, `_current_index`)
+- Retry queue persisted in Session (`retry_queue: list[str]`)
+- Statistics calculated from session state
+- 11 fewer tests to maintain (100 vs 111)
+
+### Alternative 4: Hybrid (Queue + Sync)
+```
 **Pros**: Best of both worlds  
 **Cons**: Complex, MVP overkill  
 **Decision**: Future enhancement

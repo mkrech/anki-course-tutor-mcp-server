@@ -100,6 +100,77 @@ class AnkiClient:
         """
         return await self.invoke("notesInfo", notes=note_ids)
 
+    async def answer_card(self, card_id: int, ease: int) -> None:
+        """Submit answer for a card to Anki's scheduler.
+        
+        Args:
+            card_id: Anki card ID
+            ease: Ease button pressed (1=Again, 2=Hard, 3=Good, 4=Easy)
+            
+        Raises:
+            AnkiConnectError: If submission fails
+            ValueError: If ease value is invalid
+        """
+        if ease not in (1, 2, 3, 4):
+            raise ValueError(f"Invalid ease value: {ease}. Must be 1-4.")
+        
+        # answerCards expects answers as list of dicts with cardId and ease
+        await self.invoke("answerCards", answers=[{"cardId": card_id, "ease": ease}])
+
+    async def get_card_info(self, card_id: int) -> dict[str, Any]:
+        """Get detailed information about a card.
+        
+        Args:
+            card_id: Anki card ID
+            
+        Returns:
+            Dictionary with card information (due, interval, ease factor, etc.)
+            
+        Raises:
+            AnkiConnectError: If request fails
+        """
+        result = await self.invoke("cardsInfo", cards=[card_id])
+        if not result:
+            raise AnkiConnectError(f"No information found for card {card_id}")
+        return result[0]
+
+    async def get_reviews_of_cards(self, card_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        """Get review history for multiple cards.
+        
+        Args:
+            card_ids: List of Anki card IDs
+            
+        Returns:
+            Dictionary mapping card ID to list of review records
+            Each review record contains: id, usn, ease, ivl, lastIvl, factor, time, type
+            
+        Raises:
+            AnkiConnectError: If request fails
+        """
+        # AnkiConnect returns format: "card_id": [[id, usn, ease, ivl, lastIvl, factor, time, type], ...]
+        result = await self.invoke("getReviewsOfCards", cards=card_ids)
+        
+        # Convert to more readable format
+        reviews_map = {}
+        for card_id_str, review_arrays in result.items():
+            card_id = int(card_id_str)
+            reviews = []
+            for review_array in review_arrays:
+                if len(review_array) >= 8:
+                    reviews.append({
+                        "id": review_array[0],
+                        "usn": review_array[1],
+                        "ease": review_array[2],
+                        "interval": review_array[3],
+                        "last_interval": review_array[4],
+                        "ease_factor": review_array[5],
+                        "time_ms": review_array[6],
+                        "type": review_array[7],
+                    })
+            reviews_map[card_id] = reviews
+        
+        return reviews_map
+
 
 class CardConverter:
     """Convert Anki notes to unified Card model."""

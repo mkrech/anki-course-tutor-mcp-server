@@ -1,6 +1,6 @@
 # Anki Course Tutor MCP Server
 
-AI-powered learning system that combines Anki's spaced repetition with personality-driven tutoring via chat interface.
+AI-powered learning system that combines Anki's spaced repetition with AI-driven tutoring via chat interface.
 
 [![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)](tests/)
 [![Coverage](https://img.shields.io/badge/coverage-74%25-green)](htmlcov/)
@@ -10,10 +10,10 @@ AI-powered learning system that combines Anki's spaced repetition with personali
 ## ✨ Features
 
 - 🎓 **Chat-based Learning** - Natural conversation interface via MCP
-- 🎭 **Personality Rotation** - AI tutor alternates between Normal (3x) and Pirate (1x) modes
+- 🤖 **AI Explanations** - Contextual explanations for incorrect answers
 - ✅ **User Review System** - Confirm or override automatic answer evaluation
 - 📊 **Progress Tracking** - Detailed statistics and learning analytics
-- 🔄 **Simple SRS** - Retry incorrect cards automatically
+- 🔄 **Anki Scheduler Integration** - Submit reviews directly to Anki's spaced repetition system
 - 🎯 **Flexible Modes** - Explain mode (with AI explanations) or Test mode (assessment only)
 - 🔌 **11 MCP Tools** - Complete learning workflow via chat interface
 - 📝 **3 Card Types** - Support for Basic, Cloze, and Multiple Choice cards
@@ -52,11 +52,34 @@ pip install -e ".[dev]"
 
 Edit `config.yaml` to customize:
 
-- Anki connection settings
-- Tutor personalities and weights
-- Learning modes
-- Evaluation behavior
-- Storage paths
+### Anki Connection & Scheduler
+
+```yaml
+anki:
+  connect_url: "http://localhost:8765"  # AnkiConnect URL
+  connect_timeout: 30                    # Connection timeout (seconds)
+  retry_attempts: 3                      # Number of retry attempts
+  use_anki_scheduler: true               # Enable Anki scheduler integration
+```
+
+**Scheduler Integration:**
+- When `use_anki_scheduler: true`, reviews are submitted to Anki's native spaced repetition scheduler
+- Cards will appear in Anki with updated due dates based on your answers
+- **Ease mapping**: Correct = 4 (Easy), Incorrect = 1 (Again)
+- Requires Anki Desktop running with AnkiConnect
+- Set to `false` for local-only mode (no Anki scheduler updates)
+
+**Requirements:**
+- Anki Desktop must be running
+- AnkiConnect addon installed and enabled
+- Cards must have numeric IDs from Anki
+
+### Other Settings
+
+- **Tutor personalities and weights** - Control Normal/Pirate rotation
+- **Learning modes** - EXPLAIN (with AI) or TEST (assessment only)
+- **Evaluation behavior** - Case sensitivity, whitespace handling
+- **Storage paths** - Session and progress data locations
 
 ## Usage with Claude Desktop
 
@@ -128,15 +151,6 @@ AI: Let me explain:
     While "hour" and "time" are related, we use "What time" as the 
     standard expression. Think of "time" as the specific point on 
     the clock, while "hour" is more about duration.
-```
-
-### Pirate Personality (Every 4th Explanation)
-
-```
-AI: Arrr! Let me explain this, matey!
-    
-    "Estar" be the verb for temporary states, like how ye be feelin' 
-    right now, savvy? "Ser" be for permanent things, like yer name!
 ```
 
 ## 🏗️ Architecture
@@ -224,9 +238,9 @@ anki-course-tutor-mcp-server/
 │   ├── session_manager.py    # Session CRUD
 │   ├── progress_tracker.py   # Statistics and persistence
 │   ├── scheduler.py          # Card scheduling
-│   ├── ai_tutor.py           # Personality and explanations
+│   ├── ai_tutor.py           # AI explanations
 │   └── anki_client.py        # Anki integration
-├── tests/                    # 102 tests
+├── tests/                    # 100 tests
 ├── docs/                     # Documentation
 │   └── MANUAL_TESTING.md     # Testing guide
 └── data/                     # Sessions and progress (gitignored)
@@ -234,15 +248,32 @@ anki-course-tutor-mcp-server/
 
 ## 🐛 Troubleshooting
 
+### AnkiConnect Issues
+
 **"AnkiConnect not available"**
-- Ensure Anki is running
-- Verify AnkiConnect addon is installed
+- Ensure Anki Desktop is running
+- Verify AnkiConnect addon is installed (Tools → Add-ons)
 - Test connection: `curl http://localhost:8765`
+- Check AnkiConnect configuration allows local connections
+
+**"Failed to submit review to Anki"**
+- Anki Desktop must be running during learning sessions
+- Check `use_anki_scheduler: true` in `config.yaml`
+- Verify card IDs are numeric (imported from Anki)
+- Review AnkiConnect logs in Anki (Tools → Add-ons → AnkiConnect → View Files)
+
+### Deck and Card Issues
 
 **"Deck not found"**
 - Check deck name is exact (case-sensitive)
-- Verify deck contains cards
-- Refresh Anki
+- Verify deck contains cards in Anki
+- Refresh Anki deck list
+- Try listing decks first to see available names
+
+**"Invalid card ID"**
+- Cards must be imported from Anki with numeric IDs
+- Cannot use manually created cards with string IDs for scheduler integration
+- Set `use_anki_scheduler: false` for local-only mode without Anki updates
 
 See [docs/MANUAL_TESTING.md](docs/MANUAL_TESTING.md) for detailed troubleshooting.
 

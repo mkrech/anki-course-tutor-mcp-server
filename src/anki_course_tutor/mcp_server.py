@@ -6,7 +6,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from anki_course_tutor.anki_client import AnkiDeckImporter
+from anki_course_tutor.anki_client import AnkiClient, AnkiDeckImporter
 from anki_course_tutor.config import AnkiConfig, StorageConfig
 from anki_course_tutor.learning_engine import LearningEngine
 from anki_course_tutor.models import LearningMode, LearningState, SessionStatus
@@ -21,12 +21,14 @@ _learning_engine = None
 _session_manager = None
 _progress_tracker = None
 _anki_importer = None
+_anki_client = None  # NEW: Global AnkiClient for scheduler integration
 
 
 def initialize_managers(
     anki_url: str = "http://localhost:8765",
     sessions_dir: Path | str = "data/sessions",
     progress_dir: Path | str = "data/progress",
+    use_anki_scheduler: bool = True,
 ) -> None:
     """Initialize global managers.
 
@@ -34,8 +36,9 @@ def initialize_managers(
         anki_url: AnkiConnect URL
         sessions_dir: Directory for session files
         progress_dir: Directory for progress files
+        use_anki_scheduler: Enable Anki scheduler integration
     """
-    global _session_manager, _progress_tracker, _anki_importer
+    global _session_manager, _progress_tracker, _anki_importer, _anki_client
 
     # Create storage config for SessionManager
     storage_config = StorageConfig(
@@ -50,11 +53,20 @@ def initialize_managers(
         connect_url=anki_url,
         connect_timeout=30,
         retry_attempts=3,
+        use_anki_scheduler=use_anki_scheduler,
     )
 
     _session_manager = SessionManager(storage_config)
     _progress_tracker = ProgressTracker(progress_dir)
     _anki_importer = AnkiDeckImporter(anki_config)
+    
+    # Initialize AnkiClient for scheduler integration if enabled
+    if use_anki_scheduler:
+        _anki_client = AnkiClient(url=anki_url)
+        logger.info("Anki scheduler integration enabled")
+    else:
+        _anki_client = None
+        logger.info("Anki scheduler integration disabled (local-only mode)")
 
     logger.info("Initialized managers for MCP server")
 
@@ -125,8 +137,8 @@ async def start_session(deck_name: str, chapter: str = "", mode: str = "explain"
                 # Save session
         _session_manager.save_session(session)
 
-        # Initialize learning engine
-        _learning_engine = LearningEngine(session, cards, learning_mode)
+        # Initialize learning engine with optional AnkiClient
+        _learning_engine = LearningEngine(session, cards, learning_mode, anki_client=_anki_client)
         _active_session = session
 
         logger.info(f"Started session {session.session_id} with {len(cards)} cards in {mode} mode")
@@ -179,8 +191,8 @@ async def resume_session(session_id: str) -> dict[str, Any]:
         # Filter to cards in session
         session_cards = [card for card in cards if card.id in session.card_ids]
 
-        # Initialize learning engine
-        _learning_engine = LearningEngine(session, session_cards, session.mode)
+        # Initialize learning engine with optional AnkiClient
+        _learning_engine = LearningEngine(session, session_cards, session.mode, anki_client=_anki_client)
         _active_session = session
 
         logger.info(f"Resumed session {session_id}")
@@ -270,7 +282,7 @@ async def confirm_evaluation(is_correct: bool) -> dict[str, Any]:
         return {"error": "No active session"}
 
     try:
-        result = _learning_engine.confirm_evaluation(is_correct)
+        result = await _learning_engine.confirm_evaluation(is_correct)
 
         # Update session
         _session_manager.save_session(_active_session)
@@ -298,12 +310,10 @@ async def get_explanation() -> dict[str, Any]:
     try:
         result = await _learning_engine.get_explanation()
 
-        # Update session with new personality count
+        # Update session
         _session_manager.save_session(_active_session)
 
-        logger.info(
-            f"Generated explanation with personality: {result.get('personality', 'unknown')}"
-        )
+        logger.info(f"Generated explanation for card")
         return result
 
     except Exception as e:
@@ -344,7 +354,7 @@ async def get_session_stats() -> dict[str, Any]:
         return {"error": "No active session"}
 
     try:
-        stats = _learning_engine.scheduler.get_stats()
+        stats = _learning_engine._get_stats()
         state_info = _learning_engine.get_current_state()
 
         return {
@@ -487,10 +497,22 @@ Created: {_active_session.created_at.strftime("%Y-%m-%d %H:%M")}
 """
 
 
-def run_server():
-    """Run the MCP server."""
-    # Initialize managers
-    initialize_managers()
+def run_server(config=None):
+    """Run the MCP server.
+    
+    Args:
+        config: Optional Config object. If not provided, defaults are used.
+    """
+    # Initialize managers with config
+    if config:
+        initialize_managers(
+            anki_url=config.anki.connect_url,
+            sessions_dir=config.storage.sessions_dir,
+            progress_dir=config.storage.progress_dir,
+            use_anki_scheduler=config.anki.use_anki_scheduler,
+        )
+    else:
+        initialize_managers()
 
     logger.info("Starting Anki Course Tutor MCP Server...")
     logger.info("Available tools: list_decks, start_session, resume_session, get_next_card")

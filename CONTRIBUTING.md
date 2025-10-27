@@ -54,7 +54,7 @@ anki-course-tutor-mcp-server/
 │   ├── session_manager.py     # Session CRUD
 │   ├── progress_tracker.py    # Statistics & persistence
 │   ├── scheduler.py           # Two-queue scheduling
-│   ├── ai_tutor.py            # Personality rotation & explanations
+│   ├── ai_tutor.py            # AI explanations
 │   ├── anki_client.py         # Anki integration
 │   ├── config.py              # Configuration management
 │   └── models/                # Data models
@@ -182,10 +182,37 @@ async def test_get_explanation_generates_text(self):
     explanation = await tutor.generate_explanation(
         card=sample_card,
         user_answer="wrong",
-        personality=Personality.NORMAL
+        correct_answer="right",
+        mode=LearningMode.EXPLAIN
     )
     
     assert len(explanation) > 0
+```
+
+### Card Management Architecture
+
+The system uses session-based card management with direct list iteration:
+
+- **New cards**: Iterated sequentially from `_cards` list
+- **Retry cards**: Stored in `_retry_queue` (deque) and `session.retry_queue` (persisted)
+- **Priority**: New cards presented first, then retry cards
+- **Statistics**: Calculated from session state (`_current_index`, `_retry_queue`, `card_progress`)
+
+```python
+# Example: Card iteration logic
+def _get_next_card_internal(self) -> Card | None:
+    # Priority 1: New cards (not yet seen)
+    if self._current_index < len(self._cards):
+        card = self._cards[self._current_index]
+        self._current_index += 1
+        return card
+    
+    # Priority 2: Retry queue (incorrectly answered cards)
+    if self._retry_queue:
+        card_id = self._retry_queue.popleft()
+        return self._card_map.get(card_id)
+    
+    return None  # All done
 ```
 
 ## Code Style
@@ -200,39 +227,7 @@ async def test_get_explanation_generates_text(self):
 
 ### Example
 
-```python
-"""Module for card scheduling logic."""
-
-from collections import deque
-from typing import List
-
-from anki_course_tutor.models import Card
-
-class SimpleLearningScheduler:
-    """Scheduler with two-queue system for new and retry cards.
-    
-    Args:
-        cards: List of cards to schedule
-    """
-    
-    def __init__(self, cards: list[Card]) -> None:
-        """Initialize scheduler with cards."""
-        self.new_queue: deque[Card] = deque(cards)
-        self.retry_queue: deque[Card] = deque()
-        self.completed_cards: list[Card] = []
-    
-    def get_next_card(self) -> Card | None:
-        """Get next card prioritizing new cards over retries.
-        
-        Returns:
-            Next card to present or None if no cards available
-        """
-        if self.new_queue:
-            return self.new_queue.popleft()
-        if self.retry_queue:
-            return self.retry_queue.popleft()
-        return None
-```
+The card management architecture example is shown above in "Card Management Architecture".
 
 ### Imports
 
@@ -446,14 +441,6 @@ class NewModel:
 3. Update evaluation logic in `learning_engine.py`
 4. Add tests in `tests/test_learning_engine.py`
 5. Update documentation
-
-### Adding a New Personality
-
-1. Update `Personality` enum in `models/__init__.py`
-2. Add prompt template in `ai_tutor.py`
-3. Update rotation logic if needed
-4. Add tests in `tests/test_ai_tutor.py`
-5. Update config.yaml example
 
 ### Adding a New MCP Tool
 

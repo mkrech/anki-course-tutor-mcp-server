@@ -148,7 +148,6 @@ class Session:
     card_ids: list[str]
     current_card_index: int = 0  # Simple progress tracking
     card_progress: dict[str, CardProgress] = field(default_factory=dict)
-    personality_count: int = 0
     
     # REMOVED: scheduler state, intervals, due dates
     # Anki is source of truth for these

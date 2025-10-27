@@ -55,6 +55,36 @@ def sample_cards():
     ]
 
 
+@pytest.fixture
+def anki_cards():
+    """Create sample cards with numeric IDs for Anki integration tests."""
+    return [
+        Card(
+            id="1",  # Numeric ID as string
+            type=CardType.BASIC,
+            question="What is Python?",
+            answer="A programming language",
+            deck="TestDeck",
+        ),
+        Card(
+            id="2",
+            type=CardType.CLOZE,
+            question="Python was created by [...]",
+            answer="Guido van Rossum",
+            cloze_text="Python was created by {{c1::Guido van Rossum}}",
+            deck="TestDeck",
+        ),
+        Card(
+            id="3",
+            type=CardType.MULTIPLE_CHOICE,
+            question="What is 2+2?",
+            answer="4",
+            options=["3", "4", "5", "6"],
+            deck="TestDeck",
+        ),
+    ]
+
+
 class TestAnswerEvaluator:
     """Tests for AnswerEvaluator."""
 
@@ -176,7 +206,7 @@ class TestLearningEngine:
 
         assert engine.session == sample_session
         assert engine.mode == LearningMode.EXPLAIN
-        assert len(engine.scheduler.new_queue) == 3
+        assert len(engine._cards) == 3
 
     def test_start_session(self, sample_session, sample_cards):
         """Test starting a learning session."""
@@ -220,7 +250,7 @@ class TestLearningEngine:
         assert result["automatic_evaluation"] is False
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
-    def test_confirm_evaluation_correct(self, sample_session, sample_cards):
+    async def test_confirm_evaluation_correct(self, sample_session, sample_cards):
         """Test confirming a correct evaluation."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
@@ -229,18 +259,21 @@ class TestLearningEngine:
 
         engine.submit_answer("A programming language")
 
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         # Should move to next card
         assert result["state"] == "awaiting_answer"
         assert result["card_id"] == "card-2"
-        assert len(engine.scheduler.completed_cards) == 1
+        
+        # Check stats to verify completion
+        stats = engine._get_stats()
+        assert stats["completed_cards"] == 1
 
         # Should show result
         assert result["previous_result"] == "correct"
         assert result["previous_card_id"] == first_card_id
 
-    def test_confirm_evaluation_incorrect_explain_mode(self, sample_session, sample_cards):
+    async def test_confirm_evaluation_incorrect_explain_mode(self, sample_session, sample_cards):
         """Test confirming incorrect in EXPLAIN mode."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
@@ -250,7 +283,7 @@ class TestLearningEngine:
 
         engine.submit_answer("Wrong answer")
 
-        result = engine.confirm_evaluation(is_correct=False)
+        result = await engine.confirm_evaluation(is_correct=False)
 
         # Should enter explaining state
         assert result["state"] == "explaining"
@@ -259,10 +292,10 @@ class TestLearningEngine:
         assert engine.current_card.id == first_card_id
         assert result["card_id"] == first_card_id
         # But card is already in retry queue
-        stats = engine.scheduler.get_stats()
+        stats = engine._get_stats()
         assert stats["retry_cards"] == 1
 
-    def test_confirm_evaluation_incorrect_test_mode(self, sample_session, sample_cards):
+    async def test_confirm_evaluation_incorrect_test_mode(self, sample_session, sample_cards):
         """Test confirming incorrect in TEST mode shows result."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.TEST)
         engine.start()
@@ -272,7 +305,7 @@ class TestLearningEngine:
         first_card_answer = engine.current_card.answer
 
         engine.submit_answer("Wrong answer")
-        result = engine.confirm_evaluation(is_correct=False)
+        result = await engine.confirm_evaluation(is_correct=False)
 
         # Should move to next card and show result
         assert result["state"] == "awaiting_answer"
@@ -283,18 +316,19 @@ class TestLearningEngine:
         assert result["previous_card_id"] == first_card_id
         assert result["previous_correct_answer"] == first_card_answer
 
-    def test_user_override_evaluation(self, sample_session, sample_cards):
+    async def test_user_override_evaluation(self, sample_session, sample_cards):
         """Test user overriding automatic evaluation."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
 
         # Submit correct answer but user says it's wrong
         engine.submit_answer("A programming language")
-        result = engine.confirm_evaluation(is_correct=False)
+        result = await engine.confirm_evaluation(is_correct=False)
 
         # Should respect user's decision
         assert result["state"] == "explaining"
-        assert len(engine.scheduler.retry_queue) == 1
+        stats = engine._get_stats()
+        assert stats["retry_cards"] == 1
 
     @pytest.mark.asyncio
     async def test_get_explanation(self, sample_session, sample_cards):
@@ -302,16 +336,13 @@ class TestLearningEngine:
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
         engine.submit_answer("Wrong")
-        engine.confirm_evaluation(is_correct=False)
+        await engine.confirm_evaluation(is_correct=False)
 
         result = await engine.get_explanation()
 
         assert result["state"] == "explaining"
         assert "explanation" in result
-        assert "personality" in result
         assert result["card_id"] == sample_cards[0].id
-        # Should increment personality count
-        assert engine.session.personality_count == 1
 
     @pytest.mark.asyncio
     async def test_next_card_after_explanation(self, sample_session, sample_cards):
@@ -323,7 +354,7 @@ class TestLearningEngine:
         first_card_id = engine.current_card.id
 
         engine.submit_answer("Wrong")
-        engine.confirm_evaluation(is_correct=False)
+        await engine.confirm_evaluation(is_correct=False)
 
         # In EXPLAIN mode with incorrect answer, card is in retry queue
         # but current_card is still set for explanation context
@@ -339,13 +370,13 @@ class TestLearningEngine:
         # Now should have moved to second card (first is in retry queue)
         assert result["card_id"] != first_card_id
 
-    def test_complete_session(self, sample_session, sample_cards):
+    async def test_complete_session(self, sample_session, sample_cards):
         """Test completing all cards."""
         engine = LearningEngine(sample_session, sample_cards[:1], LearningMode.TEST)
         engine.start()
         engine.submit_answer("A programming language")
 
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         assert result["state"] == "session_complete"
         assert engine.session.state == LearningState.SESSION_COMPLETE
@@ -362,12 +393,12 @@ class TestLearningEngine:
         assert "options" in result
         assert len(result["options"]) == 4
 
-    def test_card_progress_tracking(self, sample_session, sample_cards):
+    async def test_card_progress_tracking(self, sample_session, sample_cards):
         """Test that card progress is tracked."""
         engine = LearningEngine(sample_session, sample_cards[:1], LearningMode.EXPLAIN)
         engine.start()
         engine.submit_answer("A programming language")
-        engine.confirm_evaluation(is_correct=True)
+        await engine.confirm_evaluation(is_correct=True)
 
         # Check progress was recorded
         assert "card-1" in engine.session.card_progress
@@ -376,7 +407,7 @@ class TestLearningEngine:
         assert progress.correct_count == 1
         assert progress.incorrect_count == 0
 
-    def test_retry_incorrect_card(self, sample_session, sample_cards):
+    async def test_retry_incorrect_card(self, sample_session, sample_cards):
         """Test that incorrect cards are retried after all new cards."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.TEST)
         engine.start()
@@ -384,19 +415,19 @@ class TestLearningEngine:
         # Answer first card incorrectly
         first_card_id = engine.current_card.id
         engine.submit_answer("Wrong")
-        engine.confirm_evaluation(is_correct=False)
+        await engine.confirm_evaluation(is_correct=False)
 
         # Card is now in retry queue, but we continue with new cards first
-        stats = engine.scheduler.get_stats()
+        stats = engine._get_stats()
         assert stats["retry_cards"] == 1
 
         # Answer second card correctly
         engine.submit_answer("Guido van Rossum")
-        engine.confirm_evaluation(is_correct=True)
+        await engine.confirm_evaluation(is_correct=True)
 
         # Answer third card correctly
         engine.submit_answer("4")
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         # After all new cards, retry queue should present first card again
         assert result["state"] == "awaiting_answer"
@@ -414,7 +445,7 @@ class TestLearningEngine:
         assert state["mode"] == "explain"
         assert "stats" in state
 
-    def test_invalid_state_transitions(self, sample_session, sample_cards):
+    async def test_invalid_state_transitions(self, sample_session, sample_cards):
         """Test that invalid state transitions are rejected."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
 
@@ -426,5 +457,112 @@ class TestLearningEngine:
         engine.start()
 
         # Try to confirm before submitting
-        result = engine.confirm_evaluation(True)
+        result = await engine.confirm_evaluation(True)
         assert "error" in result
+
+
+@pytest.mark.asyncio
+class TestAnkiSchedulerIntegration:
+    """Tests for Anki scheduler integration."""
+
+    async def test_confirm_evaluation_submits_to_anki_correct(
+        self, sample_session, anki_cards
+    ):
+        """Test that correct answer submits ease=4 to Anki."""
+        from unittest.mock import AsyncMock
+
+        mock_anki_client = AsyncMock()
+        engine = LearningEngine(
+            sample_session, anki_cards, LearningMode.EXPLAIN, anki_client=mock_anki_client
+        )
+        engine.start()
+        engine.submit_answer("A programming language")
+
+        result = await engine.confirm_evaluation(is_correct=True)
+
+        # Should have called answer_card with ease=4
+        mock_anki_client.answer_card.assert_awaited_once_with(card_id=1, ease=4)
+        assert result["state"] == "awaiting_answer"
+
+    async def test_confirm_evaluation_submits_to_anki_incorrect(
+        self, sample_session, anki_cards
+    ):
+        """Test that incorrect answer submits ease=1 to Anki."""
+        from unittest.mock import AsyncMock
+
+        mock_anki_client = AsyncMock()
+        engine = LearningEngine(
+            sample_session, anki_cards, LearningMode.EXPLAIN, anki_client=mock_anki_client
+        )
+        engine.start()
+        engine.submit_answer("Wrong answer")
+
+        result = await engine.confirm_evaluation(is_correct=False)
+
+        # Should have called answer_card with ease=1
+        mock_anki_client.answer_card.assert_awaited_once_with(card_id=1, ease=1)
+        assert result["state"] == "explaining"
+
+    async def test_confirm_evaluation_without_anki_client(
+        self, sample_session, anki_cards
+    ):
+        """Test that learning works without AnkiClient (local mode)."""
+        engine = LearningEngine(
+            sample_session, anki_cards, LearningMode.TEST, anki_client=None
+        )
+        engine.start()
+        engine.submit_answer("A programming language")
+
+        result = await engine.confirm_evaluation(is_correct=True)
+
+        # Should work normally without Anki
+        assert result["state"] == "awaiting_answer"
+        assert result["previous_result"] == "correct"
+
+    async def test_anki_submission_failure(self, sample_session, anki_cards):
+        """Test that Anki submission failure returns error."""
+        from unittest.mock import AsyncMock
+
+        mock_anki_client = AsyncMock()
+        mock_anki_client.answer_card.side_effect = Exception("Connection failed")
+
+        engine = LearningEngine(
+            sample_session, anki_cards, LearningMode.EXPLAIN, anki_client=mock_anki_client
+        )
+        engine.start()
+        engine.submit_answer("A programming language")
+
+        result = await engine.confirm_evaluation(is_correct=True)
+
+        # Should return error
+        assert "error" in result
+        assert result["state"] == "error"
+        assert "Anki" in result["error"]
+
+    async def test_invalid_card_id_fails(self, sample_session):
+        """Test that non-integer card ID fails gracefully."""
+        from unittest.mock import AsyncMock
+        from anki_course_tutor.models import Card, CardType
+
+        mock_anki_client = AsyncMock()
+
+        # Create card with invalid (non-numeric) ID
+        invalid_card = Card(
+            id="not-a-number",
+            type=CardType.BASIC,
+            question="Test",
+            answer="Answer",
+            deck="Test",
+        )
+
+        engine = LearningEngine(
+            sample_session, [invalid_card], LearningMode.TEST, anki_client=mock_anki_client
+        )
+        engine.start()
+        engine.submit_answer("Answer")
+
+        result = await engine.confirm_evaluation(is_correct=True)
+
+        # Should return error about invalid card ID
+        assert "error" in result
+        assert "Invalid card ID" in result["error"]

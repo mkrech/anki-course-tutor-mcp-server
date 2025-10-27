@@ -59,8 +59,8 @@ class Session:
     last_updated: datetime = field(default_factory=datetime.now)
     card_ids: list[str] = field(default_factory=list)
     current_card_index: int = 0
+    retry_queue: list[str] = field(default_factory=list)  # Card IDs for retry
     card_progress: dict[str, CardProgress] = field(default_factory=dict)
-    personality_count: int = 0  # Track personality rotation
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -75,6 +75,7 @@ class Session:
             "last_updated": self.last_updated.isoformat(),
             "card_ids": self.card_ids,
             "current_card_index": self.current_card_index,
+            "retry_queue": self.retry_queue,
             "card_progress": {
                 card_id: {
                     "card_id": cp.card_id,
@@ -86,7 +87,6 @@ class Session:
                 }
                 for card_id, cp in self.card_progress.items()
             },
-            "personality_count": self.personality_count,
         }
 
     @classmethod
@@ -103,6 +103,7 @@ class Session:
             last_updated=datetime.fromisoformat(data["last_updated"]),
             card_ids=data.get("card_ids", []),
             current_card_index=data.get("current_card_index", 0),
+            retry_queue=data.get("retry_queue", []),
             card_progress={
                 card_id: CardProgress(
                     card_id=cp["card_id"],
@@ -116,5 +117,4 @@ class Session:
                 )
                 for card_id, cp in data.get("card_progress", {}).items()
             },
-            personality_count=data.get("personality_count", 0),
         )

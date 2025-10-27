@@ -1,9 +1,15 @@
 # Anki Course Tutor Configuration
 
 anki:
+  # AnkiConnect API settings
   connect_url: "http://localhost:8765"
   connect_timeout: 30
   retry_attempts: 3
+  
+  # Scheduler integration (requires Anki Desktop with AnkiConnect)
+  # When enabled, reviews are submitted to Anki's native scheduler
+  # Ease mapping: correct=4 (Easy), incorrect=1 (Again)
+  use_anki_scheduler: true  # Set to false for local-only mode
 
 tutor:
   personalities:

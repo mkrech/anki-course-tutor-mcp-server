@@ -33,8 +33,8 @@ def main():
 
         logger.info("Starting MCP server...")
 
-        # Run MCP server
-        run_server()
+        # Run MCP server with config
+        run_server(config=config)
 
     except FileNotFoundError as e:
         logger.error(f"Configuration error: {e}")

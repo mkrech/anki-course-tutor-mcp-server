@@ -1,7 +1,7 @@
 [project]
 name = "anki-course-tutor-mcp-server"
 version = "0.1.0"
-description = "AI-powered learning system combining Anki spaced repetition with personality-driven tutoring"
+description = "AI-powered learning system combining Anki spaced repetition with AI-driven tutoring"
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }

@@ -125,10 +125,12 @@ class TestCompleteWorkflow:
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
         # Confirm evaluation (correct)
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         assert result["state"] == "awaiting_answer"  # Moved to next card
-        assert engine.scheduler.completed_cards[0].id == first_card_id
+        # Verify card was tracked in session progress
+        assert first_card_id in engine.session.card_progress
+        assert engine.session.card_progress[first_card_id].correct_count == 1
 
         # Step 5: Answer second card incorrectly
         second_card_id = engine.current_card.id
@@ -137,7 +139,7 @@ class TestCompleteWorkflow:
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
         # Confirm evaluation (incorrect)
-        result = engine.confirm_evaluation(is_correct=False)
+        result = await engine.confirm_evaluation(is_correct=False)
 
         assert result["state"] == "explaining"
         assert engine.session.state == LearningState.EXPLAINING
@@ -148,7 +150,7 @@ class TestCompleteWorkflow:
         ) as mock_explain:
             mock_explain.return_value = {
                 "explanation": "Guido van Rossum created Python in 1991.",
-                "personality": "normal",
+                "count": 1,
             }
 
             explanation = await engine.get_explanation()
@@ -169,13 +171,13 @@ class TestCompleteWorkflow:
 
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         # Step 9: Retry incorrect card (second card)
         assert engine.current_card.id == second_card_id  # Back to second card
         engine.submit_answer("Guido van Rossum")
 
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         # Step 10: Session complete
         assert result["state"] == "session_complete"
@@ -256,7 +258,7 @@ class TestCompleteWorkflow:
         engine.submit_answer("A programming language")
 
         # In TEST mode, confirm_evaluation moves directly to next card
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         assert result["state"] == "awaiting_answer"
         assert result["previous_result"] == "correct"  # Should show result in TEST mode
@@ -267,7 +269,7 @@ class TestCompleteWorkflow:
         engine.submit_answer("Wrong answer")
 
         # In TEST mode, incorrect answer moves to next card (no explanation)
-        result = engine.confirm_evaluation(is_correct=False)
+        result = await engine.confirm_evaluation(is_correct=False)
 
         assert result["state"] == "awaiting_answer"
         assert result["previous_result"] == "incorrect"
@@ -277,13 +279,13 @@ class TestCompleteWorkflow:
         # Continue until session complete
         third_card_id = engine.current_card.id
         engine.submit_answer("1991")
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         # Should return to retry incorrect card
         assert engine.current_card.id == second_card_id
 
         engine.submit_answer("Guido van Rossum")
-        result = engine.confirm_evaluation(is_correct=True)
+        result = await engine.confirm_evaluation(is_correct=True)
 
         assert result["state"] == "session_complete"
 
@@ -338,7 +340,7 @@ class TestCompleteWorkflow:
 
         # Answer first card
         engine.submit_answer("A1")
-        engine.confirm_evaluation(is_correct=True)
+        await engine.confirm_evaluation(is_correct=True)
 
         # Save session state after answering
         session_manager.save_session(session)
@@ -363,8 +365,6 @@ class TestCompleteWorkflow:
         resumed_engine.start()
 
         # Session successfully resumed - engine is operational
-        # Note: Engine starts from beginning since scheduler doesn't restore state
-        # This is acceptable for MVP - full state restoration is a future enhancement
         assert resumed_engine.current_card is not None
         assert resumed_engine.session.session_id == session.session_id
 

@@ -1,10 +1,12 @@
 """Learning engine with state machine for card learning flow."""
 
 import logging
+from collections import deque
 from datetime import datetime
 from typing import Any
 
-from anki_course_tutor.ai_tutor import AITutor, Personality
+from anki_course_tutor.ai_tutor import AITutor
+from anki_course_tutor.anki_client import AnkiClient
 from anki_course_tutor.models import (
     Card,
     CardProgress,
@@ -13,7 +15,6 @@ from anki_course_tutor.models import (
     LearningState,
     Session,
 )
-from anki_course_tutor.scheduler import SimpleLearningScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -155,89 +156,126 @@ class AnswerEvaluator:
 class LearningEngine:
     """Main learning engine with state machine."""
 
-    def __init__(self, session: Session, cards: list[Card], mode: LearningMode):
+    def __init__(
+        self, 
+        session: Session, 
+        cards: list[Card], 
+        mode: LearningMode,
+        anki_client: AnkiClient | None = None
+    ):
         """Initialize learning engine.
 
         Args:
             session: Learning session
             cards: List of cards to learn
             mode: Learning mode (EXPLAIN or TEST)
+            anki_client: Optional AnkiConnect client for scheduler integration
         """
         self.session = session
-        self.scheduler = SimpleLearningScheduler(cards)
+        self._cards = cards  # All cards (sorted once at start)
+        # Note: session.current_card_index is the index of the CURRENT card being presented
+        # We want to continue from that card, so _current_index starts there
+        self._current_index = session.current_card_index  # Position in _cards
+        self._retry_queue: deque[str] = deque(session.retry_queue)  # Card IDs to retry
+        self._card_map: dict[str, Card] = {card.id: card for card in cards}  # Fast lookup
         self.mode = mode
+        self.anki_client = anki_client
         self.current_card: Card | None = None
         self.current_user_answer: str | None = None
         self.automatic_evaluation: bool | None = None
         self.evaluator = AnswerEvaluator()
-        self.ai_tutor = AITutor(session.personality_count)
-        
-        # Track current personality for complete learning cycles (peek without incrementing)
-        self.current_personality = self.ai_tutor.rotation.peek_next_personality()
+        self.ai_tutor = AITutor()
 
         logger.info(
             f"Initialized learning engine for session {session.session_id} "
-            f"with {len(cards)} cards in {mode.value} mode, "
-            f"starting with {self.current_personality.value} personality"
+            f"with {len(cards)} cards in {mode.value} mode"
+            + (", Anki scheduler enabled" if anki_client else ", local card ordering")
         )
+    
+    def _sync_session_state(self) -> None:
+        """Synchronize session state with internal state.
+        
+        session.current_card_index tracks the index of the CURRENT card being presented,
+        while _current_index tracks the next card to fetch.
+        """
+        if self.current_card:
+            # Find current card's index in the cards list
+            for i, card in enumerate(self._cards):
+                if card.id == self.current_card.id:
+                    self.session.current_card_index = i
+                    return
+        # If no current card or not found, use _current_index as fallback
+        self.session.current_card_index = self._current_index
 
-    def _get_personality_message(self, message_type: str, **kwargs) -> str:
-        """Get personality-appropriate message.
+    async def _submit_review_to_anki(self, card: Card, is_correct: bool) -> None:
+        """Submit review to Anki's scheduler.
         
         Args:
-            message_type: Type of message (card_presentation, evaluation, etc.)
-            **kwargs: Message parameters
+            card: Card that was reviewed
+            is_correct: Whether the answer was correct
             
-        Returns:
-            Formatted message in current personality style
+        Raises:
+            Exception: If AnkiConnect submission fails
         """
-        if self.current_personality == Personality.PIRATE:
-            return self._get_pirate_message(message_type, **kwargs)
-        else:
-            return self._get_normal_message(message_type, **kwargs)
-    
-    def _get_pirate_message(self, message_type: str, **kwargs) -> str:
-        """Get pirate-style message."""
-        if message_type == "card_presentation":
-            return f"Ahoy matey! Here be yer next question, ye landlubber! ⚔️"
-        elif message_type == "evaluation":
-            correct = kwargs.get("correct", False)
-            answer = kwargs.get("answer", "")
-            if correct:
-                return (f"Arrr! That be correct, ye savvy sailor! "
-                       f"The answer be '{answer}'. Well done, matey! ⚔️")
+        if not self.anki_client:
+            logger.debug("No AnkiClient configured, skipping Anki review submission")
+            return
+        
+        # Map correctness to Anki ease value
+        # MVP: Binary mapping - correct=4 (Easy), incorrect=1 (Again)
+        ease = 4 if is_correct else 1
+        
+        try:
+            # Card ID must be an integer - convert from string if needed
+            card_id = int(card.id)
+            await self.anki_client.answer_card(card_id=card_id, ease=ease)
+            logger.info(
+                f"Submitted review to Anki: card_id={card_id}, "
+                f"ease={ease} ({'correct' if is_correct else 'incorrect'})"
+            )
+        except ValueError as e:
+            logger.error(f"Invalid card ID '{card.id}': {e}")
+            raise Exception(f"Cannot submit review: Invalid card ID '{card.id}'") from e
+        except Exception as e:
+            logger.error(f"Failed to submit review to Anki for card {card.id}: {e}")
+            raise Exception(
+                f"Failed to submit review to Anki. "
+                f"Please ensure Anki is running with AnkiConnect enabled."
+            ) from e
+
+    def _get_next_card_internal(self) -> Card | None:
+        """Get the next card to present.
+        
+        Priority: new cards first, then retry queue.
+        This ensures all cards are seen before retrying incorrect ones.
+        
+        Returns:
+            Next card or None if all completed
+        """
+        # Priority 1: New cards (not yet seen)
+        if self._current_index < len(self._cards):
+            card = self._cards[self._current_index]
+            self._current_index += 1
+            # Note: Do NOT update session.current_card_index here
+            # It will be synced when session is saved
+            logger.debug(f"Retrieved new card: {card.id} (index {self._current_index}/{len(self._cards)})")
+            return card
+        
+        # Priority 2: Retry queue (incorrectly answered cards)
+        if self._retry_queue:
+            card_id = self._retry_queue.popleft()
+            card = self._card_map.get(card_id)
+            if card:
+                logger.debug(f"Retrieved card from retry queue: {card_id}")
+                return card
             else:
-                return (f"Shiver me timbers! That be incorrect, ye scallywag! "
-                       f"The right answer be '{answer}'. "
-                       f"→ Is this evaluation correct? (ja/nein) 🏴‍☠️")
-        elif message_type == "ready_for_explanation":
-            answer = kwargs.get("answer", "")
-            return (f"Arrr! Yer answer be incorrect, matey! The right answer be '{answer}'. "
-                   f"→ Request an explanation to learn why, or move to the next card. 🏴‍☠️")
-        elif message_type == "next_card":
-            return "Avast! Ready for the next treasure of knowledge, ye brave sailor? ⚓"
-        return "Ahoy there, matey! ⚔️"
-    
-    def _get_normal_message(self, message_type: str, **kwargs) -> str:
-        """Get normal-style message."""
-        if message_type == "card_presentation":
-            return "Here's your next question:"
-        elif message_type == "evaluation":
-            correct = kwargs.get("correct", False)
-            answer = kwargs.get("answer", "")
-            if correct:
-                return (f"CORRECT! The answer is '{answer}'. "
-                       f"→ Is this evaluation correct? (ja/nein)")
-            else:
-                return (f"INCORRECT. The correct answer is '{answer}'. "
-                       f"→ Is this evaluation correct? (ja/nein)")
-        elif message_type == "ready_for_explanation":
-            answer = kwargs.get("answer", "")
-            return (f"Your answer was incorrect. The correct answer is '{answer}'. "
-                   f"→ Request an explanation to understand why, or continue to the next card.")
-        elif message_type == "next_card":
-            return "Ready for the next card."
-        return "Let's continue learning."
+                logger.warning(f"Card {card_id} in retry queue not found in card map")
+                # Continue to next card
+                return self._get_next_card_internal()
+        
+        # All done
+        logger.info("No more cards in queues")
+        return None
 
     def start(self) -> dict[str, Any]:
         """Start the learning session.
@@ -246,7 +284,10 @@ class LearningEngine:
             Dictionary with first card presentation
         """
         self.session.state = LearningState.PRESENTING_CARD
-        self.current_card = self.scheduler.get_next_card()
+        self.current_card = self._get_next_card_internal()
+        
+        # Sync session state for persistence
+        self._sync_session_state()
 
         if not self.current_card:
             self.session.state = LearningState.SESSION_COMPLETE
@@ -284,18 +325,20 @@ class LearningEngine:
             f"automatic evaluation={self.automatic_evaluation}"
         )
 
+        # Simple evaluation message
+        if self.automatic_evaluation:
+            message = f"CORRECT! The answer is '{self.current_card.answer}'. → Is this evaluation correct? (yes/no)"
+        else:
+            message = f"INCORRECT. The correct answer is '{self.current_card.answer}'. → Is this evaluation correct? (yes/no)"
+
         return {
             "state": "awaiting_review",
             "automatic_evaluation": self.automatic_evaluation,
             "correct_answer": self.current_card.answer,
-            "message": self._get_personality_message(
-                "evaluation", 
-                correct=self.automatic_evaluation, 
-                answer=self.current_card.answer
-            ),
+            "message": message,
         }
 
-    def confirm_evaluation(self, is_correct: bool) -> dict[str, Any]:
+    async def confirm_evaluation(self, is_correct: bool) -> dict[str, Any]:
         """User confirms or overrides the automatic evaluation.
 
         Args:
@@ -310,14 +353,28 @@ class LearningEngine:
         if not self.current_card:
             return {"error": "No current card"}
 
+        # Submit review to Anki scheduler (if enabled)
+        try:
+            await self._submit_review_to_anki(self.current_card, is_correct)
+        except Exception as e:
+            logger.error(f"Failed to submit review to Anki: {e}")
+            # Return error to user - fail fast per design decision
+            return {
+                "error": str(e),
+                "state": "error",
+                "card_id": self.current_card.id,
+            }
+
         # Update card progress
         self._update_card_progress(is_correct)
 
-        # Mark in scheduler - this updates the queues immediately
+        # Update retry queue if incorrect
         if is_correct:
-            self.scheduler.mark_correct(self.current_card)
+            logger.debug(f"Card {self.current_card.id} marked as correct (completed)")
         else:
-            self.scheduler.mark_incorrect(self.current_card)
+            self._retry_queue.append(self.current_card.id)
+            self.session.retry_queue.append(self.current_card.id)  # Persist
+            logger.debug(f"Card {self.current_card.id} marked as incorrect (added to retry queue)")
 
         logger.info(
             f"Card {self.current_card.id}: user confirmed {is_correct}, "
@@ -336,10 +393,7 @@ class LearningEngine:
                 "result": "incorrect",
                 "card_id": self.current_card.id,
                 "correct_answer": previous_answer,
-                "message": self._get_personality_message(
-                    "ready_for_explanation",
-                    answer=previous_answer
-                ),
+                "message": f"The correct answer is '{previous_answer}'. Let me explain why...",
             }
 
         # In TEST mode or correct answer, move to next card but show result
@@ -376,18 +430,14 @@ class LearningEngine:
             mode=self.mode,
         )
 
-        # Update session personality count
-        self.session.personality_count = self.ai_tutor.get_current_count()
-
         logger.info(
-            f"Generated {result['personality']} explanation for card {self.current_card.id}"
+            f"Generated explanation for card {self.current_card.id}"
         )
 
         return {
             "state": "explaining",
             "card_id": self.current_card.id,
             "explanation": result["explanation"],
-            "personality": result["personality"],
             "message": "Ready to continue. Call next_card_after_explanation.",
         }
 
@@ -412,15 +462,13 @@ class LearningEngine:
             return {"error": "No card to present"}
 
         self.session.state = LearningState.AWAITING_ANSWER
-        self.session.current_card_index += 1
 
         result = {
             "state": "awaiting_answer",
             "card_id": self.current_card.id,
             "card_type": self.current_card.type.value,
             "question": self.current_card.question,
-            "personality": self.current_personality.value,
-            "message": self._get_personality_message("card_presentation"),
+            "message": "Here's your next question:",
         }
 
         # Add options for multiple choice
@@ -493,16 +541,16 @@ class LearningEngine:
         Returns:
             Dictionary with next card presentation or completion
         """
-        # Get next personality for the new card
-        self.current_personality = self.ai_tutor.rotation.get_next_personality()
-        
-        self.current_card = self.scheduler.get_next_card()
+        self.current_card = self._get_next_card_internal()
         self.current_user_answer = None
         self.automatic_evaluation = None
+        
+        # Sync session state for persistence
+        self._sync_session_state()
 
         if not self.current_card:
             self.session.state = LearningState.SESSION_COMPLETE
-            stats = self.scheduler.get_stats()
+            stats = self._get_stats()
             logger.info("Learning session completed")
             return {
                 "state": "session_complete",
@@ -511,8 +559,27 @@ class LearningEngine:
             }
 
         self.session.state = LearningState.PRESENTING_CARD
-        logger.info(f"Moving to next card {self.current_card.id} with {self.current_personality.value} personality")
+        logger.info(f"Moving to next card {self.current_card.id}")
         return self._present_card()
+
+    def _get_stats(self) -> dict[str, int]:
+        """Get current learning statistics.
+        
+        Returns:
+            Dictionary with queue sizes and completion stats
+        """
+        # Calculate from session progress
+        completed_count = sum(
+            1 for cp in self.session.card_progress.values()
+            if cp.correct_count > 0
+        )
+        
+        return {
+            "new_cards": len(self._cards) - self._current_index,  # Remaining new cards
+            "retry_cards": len(self._retry_queue),  # Cards in retry queue
+            "completed_cards": completed_count,  # Cards answered correctly at least once
+            "total_cards": len(self._cards),
+        }
 
     def get_current_state(self) -> dict[str, Any]:
         """Get current state information.
@@ -520,7 +587,7 @@ class LearningEngine:
         Returns:
             Dictionary with current state details
         """
-        stats = self.scheduler.get_stats()
+        stats = self._get_stats()
 
         return {
             "state": self.session.state.value,

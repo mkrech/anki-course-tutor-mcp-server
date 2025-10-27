@@ -82,8 +82,8 @@ After incorrect answer in EXPLAIN mode:
 
 **Expected**:
 - Server generates explanation using AI
-- Personality rotation: normal personality for first 3 cards, pirate on 4th
 - Max 5 sentences
+- Review submitted to Anki scheduler (ease=1 for incorrect)
 
 ### Test 7: Continue After Explanation
 **User**: "Next card"
@@ -133,12 +133,19 @@ Continue through all cards. Incorrect cards will return for retry.
 - [ ] Can override CORRECT → INCORRECT
 - [ ] Can override INCORRECT → CORRECT
 - [ ] Override affects card progress correctly
+- [ ] Reviews submitted to Anki scheduler with correct ease values
 
 ### ✅ AI Tutor
 - [ ] Explanations generated for incorrect answers (EXPLAIN mode)
-- [ ] Personality rotation works (3 normal : 1 pirate)
 - [ ] Sentence limiting applied (max 5)
 - [ ] Context includes card question and correct answer
+
+### ✅ Anki Scheduler Integration
+- [ ] Reviews submitted to Anki Desktop (check Anki browser)
+- [ ] Correct answers use ease=4 (Easy)
+- [ ] Incorrect answers use ease=1 (Again)
+- [ ] Card intervals updated in Anki
+- [ ] Graceful error if Anki not running
 
 ### ✅ Progress Tracking
 - [ ] Progress saved to JSON file
@@ -185,7 +192,8 @@ Number of Cards: _________
 ✅ Answer evaluation accurate
 ✅ User review/override works
 ✅ AI explanations generated
-✅ Personality rotation observed
+✅ Anki scheduler integration works
+✅ Reviews visible in Anki browser
 ✅ Progress tracking works
 ✅ Session resume works
 ✅ Statistics accurate
@@ -198,13 +206,27 @@ _________________________
 
 ## Advanced Testing
 
-### Test Personality Persistence
-1. Start session
-2. Get 2 explanations (should be normal)
-3. Pause session
-4. Resume session
-5. Get 1 more explanation (still normal)
-6. Get 1 more explanation (should be pirate)
+### Test Anki Scheduler Integration
+1. Start Anki Desktop and open a test deck
+2. Note the current review count for some cards
+3. Start learning session with this deck
+4. Complete some cards (both correct and incorrect)
+5. Check Anki browser - verify:
+   - Review history updated
+   - Card intervals changed
+   - Due dates updated appropriately
+6. Close Anki Desktop
+7. Try to answer a card → should get error message
+8. Reopen Anki → should work again
+
+### Test AnkiWeb Sync
+1. Complete learning session with reviews submitted to Anki
+2. Use Anki Desktop to sync with AnkiWeb
+3. Check AnkiWeb to verify reviews synced
+4. Access Anki on different device
+5. Verify review history is present
+6. Complete more reviews
+7. Sync again and verify bidirectional sync works
 
 ### Test Multiple Sessions
 1. Start session A with Deck 1
