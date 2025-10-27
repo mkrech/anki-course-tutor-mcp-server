@@ -1,32 +1,32 @@
 ## 1. Project Setup
-- [ ] 1.1 Create pyproject.toml with dependencies (fastmcp, anki-mcp-server, httpx, pyyaml)
-- [ ] 1.2 Set up src/ directory structure with modules
-- [ ] 1.3 Configure ruff and pytest settings
-- [ ] 1.4 Create data/ directories for sessions and progress
-- [ ] 1.5 Create default config.yaml with tunable settings
-- [ ] 1.6 Implement ConfigLoader for YAML configuration
-- [ ] 1.7 Add MCP server entry point in __main__.py
+- [x] 1.1 Create pyproject.toml with dependencies (fastmcp, anki-mcp-server, httpx, pyyaml)
+- [x] 1.2 Set up src/ directory structure with modules
+- [x] 1.3 Configure ruff and pytest settings
+- [x] 1.4 Create data/ directories for sessions and progress
+- [x] 1.5 Create default config.yaml with tunable settings
+- [x] 1.6 Implement ConfigLoader for YAML configuration
+- [x] 1.7 Add MCP server entry point in __main__.py
 
 ## 2. Data Models
-- [ ] 2.1 Implement Card model with support for Basic, Cloze, Multiple Choice
-- [ ] 2.2 Implement Session model with state tracking
-- [ ] 2.3 Implement Progress model with statistics
-- [ ] 2.4 Add CardType enum and LearningState enum
-- [ ] 2.5 Write unit tests for all models
+- [x] 2.1 Implement Card model with support for Basic, Cloze, Multiple Choice
+- [x] 2.2 Implement Session model with state tracking
+- [x] 2.3 Implement Progress model with statistics
+- [x] 2.4 Add CardType enum and LearningState enum
+- [x] 2.5 Write unit tests for all models
 
 ## 3. Anki Integration
-- [ ] 3.1 Create AnkiDeckImporter wrapping anki-mcp-server client
-- [ ] 3.2 Implement CardConverter for Anki note types to Card
-- [ ] 3.3 Add deck listing and selection
-- [ ] 3.4 Add error handling for AnkiConnect unavailable
-- [ ] 3.5 Write integration tests with mock AnkiConnect
+- [x] 3.1 Create AnkiDeckImporter wrapping anki-mcp-server client
+- [x] 3.2 Implement CardConverter for Anki note types to Card
+- [x] 3.3 Add deck listing and selection
+- [x] 3.4 Add error handling for AnkiConnect unavailable
+- [x] 3.5 Write integration tests with mock AnkiConnect
 
 ## 4. Session Management
-- [ ] 4.1 Implement SessionManager with create/load/save operations
-- [ ] 4.2 Add JSON serialization for Session model
-- [ ] 4.3 Implement session listing (filter by deck, date, status)
-- [ ] 4.4 Add session resume logic
-- [ ] 4.5 Write unit tests for session operations
+- [x] 4.1 Implement SessionManager with create/load/save operations
+- [x] 4.2 Add JSON serialization for Session model
+- [x] 4.3 Implement session listing (filter by deck, date, status)
+- [x] 4.4 Add session resume logic
+- [x] 4.5 Write unit tests for session operations
 
 ## 5. Learning Loop
 - [ ] 5.1 Implement SimpleLearningScheduler with card queues
