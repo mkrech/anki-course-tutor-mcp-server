@@ -284,7 +284,7 @@ class TestAnkiClientSchedulerMethods:
             
             await client.answer_card(card_id=12345, ease=4)
             
-            mock.assert_awaited_once_with("answerCards", cards=[12345], ease=4)
+            mock.assert_awaited_once_with("answerCards", answers=[{"cardId": 12345, "ease": 4}])
 
     async def test_answer_card_invalid_ease(self, client):
         """Test answer_card with invalid ease value."""

@@ -1,11 +1,13 @@
-"""Progress tracking with in-memory storage and statistics calculation."""
+"""Progress tracking for learning sessions."""
 
 import logging
+from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
-from anki_course_tutor.models.progress import Progress, SessionStatistics
-from anki_course_tutor.models.session import CardProgress
+from .models.progress import Progress, SessionStatistics
+from .models.session import CardProgress
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +29,8 @@ class ProgressTracker:
             card_progress: Dictionary of card_id -> CardProgress
         """
         progress.last_updated = datetime.now()
-        self._progress[progress.session_id] = progress
-        self._card_progress[progress.session_id] = card_progress.copy()
+        self._progress[progress.session_id] = deepcopy(progress)
+        self._card_progress[progress.session_id] = {k: deepcopy(v) for k, v in card_progress.items()}
         logger.debug(f"Saved progress for session {progress.session_id} to memory")
 
     def load(self, session_id: str) -> tuple[Progress, dict[str, CardProgress]]:
