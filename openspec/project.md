@@ -26,7 +26,8 @@ Build an AI-powered learning system that combines Anki's spaced repetition flash
 - Anti-corruption layer for external dependencies (Anki)
 - Domain models separate from persistence (Card, Session, Progress)
 - MCP tools for user interaction
-- JSON for data persistence
+- **In-memory storage for sessions and progress** (ephemeral data model)
+- Deep copying for object mutation prevention
 
 ### Testing Strategy
 - Unit tests for all core logic
@@ -55,7 +56,8 @@ Build an AI-powered learning system that combines Anki's spaced repetition flash
 ## Important Constraints
 - Must maintain compatibility with anki-mcp-server
 - Chat-based interaction via MCP (no standalone GUI)
-- Local data storage only (no cloud sync for MVP)
+- **In-memory storage only** - sessions and progress lost on server restart
+- **No persistence between server sessions** - designed for uvx deployment
 - Model-agnostic AI integration (works with any MCP-compatible LLM)
 - Simple spaced repetition for MVP (retry incorrect cards, not SM-2/FSRS)
 
@@ -64,3 +66,43 @@ Build an AI-powered learning system that combines Anki's spaced repetition flash
 - Anki Desktop: Must be running with AnkiConnect add-on
 - FastMCP: Handles AI communication
 - MCP-compatible AI client: Claude Desktop, or similar
+
+## Deployment Architecture
+
+### uvx Deployment Model
+The primary deployment method uses `uvx` to run directly from GitHub:
+```bash
+uvx --from git+https://github.com/mkrech/anki-course-tutor-mcp-server anki-course-tutor
+```
+
+**Key Characteristics:**
+- Package installed in read-only directory
+- No writable data directories available
+- Process lifecycle tied to MCP server session
+
+### In-Memory Storage Design
+**Rationale:** File-based persistence incompatible with read-only package directory.
+
+**Implementation:**
+- `SessionManager`: Uses `dict[str, Session]` for in-memory storage
+- `ProgressTracker`: Uses separate dictionaries for progress and card data
+- Deep copying prevents object mutation bugs
+
+**Consequences:**
+- ✅ **Pro**: No filesystem permissions needed
+- ✅ **Pro**: Faster operations (no I/O overhead)
+- ✅ **Pro**: Simpler debugging
+- ❌ **Con**: Data lost on server restart
+- ❌ **Con**: Cannot resume sessions after restart
+- ❌ **Con**: No crash recovery
+
+**Usage Pattern:**
+- Users complete learning sessions within single server runtime
+- Export progress via MCP tools for manual backup if needed
+- Server restarts require creating new sessions
+
+**Configuration:**
+- Embedded `default_config.yaml` in package using `importlib.resources`
+- Fallback chain: ENV var → local file → embedded default
+- Empty storage paths in default config (no directories created)
+
