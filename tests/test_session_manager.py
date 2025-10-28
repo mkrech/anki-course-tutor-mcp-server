@@ -1,30 +1,17 @@
 """Tests for session management."""
 
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 
-from anki_course_tutor.config import StorageConfig
 from anki_course_tutor.models import LearningMode, SessionStatus
 from anki_course_tutor.session_manager import SessionManager
 
 
 @pytest.fixture
-def temp_storage_config(tmp_path):
-    """Create temporary storage configuration."""
-    return StorageConfig(
-        data_dir=str(tmp_path),
-        sessions_dir=str(tmp_path / "sessions"),
-        progress_dir=str(tmp_path / "progress"),
-        backup_enabled=True,
-    )
-
-
-@pytest.fixture
-def session_manager(temp_storage_config):
-    """Create SessionManager instance with temp storage."""
-    return SessionManager(temp_storage_config)
+def session_manager():
+    """Create SessionManager instance with in-memory storage."""
+    return SessionManager()
 
 
 class TestSessionManager:
@@ -48,9 +35,8 @@ class TestSessionManager:
         assert session.status == SessionStatus.IN_PROGRESS
         assert session.current_card_index == 0
 
-        # Verify file was created
-        session_file = session_manager._get_session_file(session.session_id)
-        assert session_file.exists()
+        # Verify session is in memory
+        assert session.session_id in session_manager._sessions
 
     def test_save_and_load_session(self, session_manager):
         """Test saving and loading a session."""
@@ -87,16 +73,14 @@ class TestSessionManager:
             card_ids=card_ids,
         )
 
-        session_file = session_manager._get_session_file(session.session_id)
-        backup_file = session_file.with_suffix(".json.bak")
+        # In-memory mode doesn't use file backups
+        # Just verify session is stored
+        assert session.session_id in session_manager._sessions
 
-        # First save - no backup yet
-        assert not backup_file.exists()
-
-        # Second save - backup should be created
+        # Second save should update the session
         session.current_card_index = 1
         session_manager.save_session(session)
-        assert backup_file.exists()
+        assert session_manager._sessions[session.session_id].current_card_index == 1
 
     def test_list_sessions(self, session_manager):
         """Test listing sessions."""
@@ -136,13 +120,12 @@ class TestSessionManager:
     def test_delete_session(self, session_manager):
         """Test deleting a session."""
         session = session_manager.create_session("TestDeck", ["card-1", "card-2"])
-        session_file = session_manager._get_session_file(session.session_id)
-
-        assert session_file.exists()
+        
+        assert session.session_id in session_manager._sessions
 
         session_manager.delete_session(session.session_id)
 
-        assert not session_file.exists()
+        assert session.session_id not in session_manager._sessions
 
     def test_delete_nonexistent_session(self, session_manager):
         """Test deleting a session that doesn't exist."""
@@ -195,42 +178,30 @@ class TestSessionManager:
 
     def test_cleanup_old_sessions(self, session_manager):
         """Test cleaning up old sessions."""
-        # Create completed session
+        # Create completed session with old timestamp
         session1 = session_manager.create_session("Deck1", ["card-1"])
         session1.status = SessionStatus.COMPLETED
-        session_manager.save_session(session1)
+        session1.last_updated = datetime.now() - timedelta(days=31)
+        # Store directly to avoid save() overwriting timestamp
+        session_manager._sessions[session1.session_id] = session1
 
         # Create active session
         session2 = session_manager.create_session("Deck2", ["card-2"])
-
-        # Modify file timestamps to be old
-        session1_file = session_manager._get_session_file(session1.session_id)
-        old_time = (datetime.now() - timedelta(days=31)).timestamp()
-        session1_file.touch()
-        import os
-
-        os.utime(session1_file, (old_time, old_time))
 
         # Cleanup
         deleted = session_manager.cleanup_old_sessions(days=30)
 
         # Only completed session should be deleted
         assert deleted == 1
-        assert not session1_file.exists()
-        assert session_manager._get_session_file(session2.session_id).exists()
+        assert session1.session_id not in session_manager._sessions
+        assert session2.session_id in session_manager._sessions
 
-    def test_invalid_json_handling(self, session_manager, temp_storage_config):
-        """Test handling of corrupted JSON files."""
-        # Create a session file with invalid JSON
-        session_id = "invalid-session"
-        session_file = Path(temp_storage_config.sessions_dir) / f"{session_id}.json"
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(session_file, "w") as f:
-            f.write("invalid json {{{")
-
-        with pytest.raises(ValueError, match="Invalid session data"):
-            session_manager.load_session(session_id)
+    def test_invalid_json_handling(self, session_manager):
+        """Test handling of non-existent sessions."""
+        # In-memory mode doesn't have JSON corruption issues
+        # Test non-existent session instead
+        with pytest.raises(FileNotFoundError):
+            session_manager.load_session("non-existent-session")
 
     def test_session_metadata_in_list(self, session_manager):
         """Test that list_sessions returns correct metadata."""

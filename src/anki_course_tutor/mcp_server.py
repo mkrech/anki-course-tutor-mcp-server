@@ -26,27 +26,15 @@ _anki_client = None  # NEW: Global AnkiClient for scheduler integration
 
 def initialize_managers(
     anki_url: str = "http://localhost:8765",
-    sessions_dir: Path | str = "data/sessions",
-    progress_dir: Path | str = "data/progress",
     use_anki_scheduler: bool = True,
 ) -> None:
     """Initialize global managers.
 
     Args:
         anki_url: AnkiConnect URL
-        sessions_dir: Directory for session files
-        progress_dir: Directory for progress files
         use_anki_scheduler: Enable Anki scheduler integration
     """
     global _session_manager, _progress_tracker, _anki_importer, _anki_client
-
-    # Create storage config for SessionManager
-    storage_config = StorageConfig(
-        data_dir=str(Path(sessions_dir).parent),
-        sessions_dir=str(sessions_dir),
-        progress_dir=str(progress_dir),
-        backup_enabled=True,
-    )
 
     # Create Anki config
     anki_config = AnkiConfig(
@@ -56,8 +44,8 @@ def initialize_managers(
         use_anki_scheduler=use_anki_scheduler,
     )
 
-    _session_manager = SessionManager(storage_config)
-    _progress_tracker = ProgressTracker(progress_dir)
+    _session_manager = SessionManager()
+    _progress_tracker = ProgressTracker()
     _anki_importer = AnkiDeckImporter(anki_config)
     
     # Initialize AnkiClient for scheduler integration if enabled
@@ -68,7 +56,8 @@ def initialize_managers(
         _anki_client = None
         logger.info("Anki scheduler integration disabled (local-only mode)")
 
-    logger.info("Initialized managers for MCP server")
+    logger.info("Initialized managers for MCP server (in-memory mode)")
+
 
 
 # Create MCP server
@@ -507,8 +496,6 @@ def run_server(config=None):
     if config:
         initialize_managers(
             anki_url=config.anki.connect_url,
-            sessions_dir=config.storage.sessions_dir,
-            progress_dir=config.storage.progress_dir,
             use_anki_scheduler=config.anki.use_anki_scheduler,
         )
     else:

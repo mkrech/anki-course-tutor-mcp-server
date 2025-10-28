@@ -21,20 +21,16 @@ class TestMCPServerSetup:
 
     def test_initialize_managers(self):
         """Test manager initialization."""
-        with (
-            tempfile.TemporaryDirectory() as sessions_dir,
-            tempfile.TemporaryDirectory() as progress_dir,
-        ):
-            mcp_server.initialize_managers(sessions_dir=sessions_dir, progress_dir=progress_dir)
+        mcp_server.initialize_managers()
 
-            assert mcp_server._session_manager is not None
-            assert mcp_server._progress_tracker is not None
-            assert mcp_server._anki_importer is not None
+        assert mcp_server._session_manager is not None
+        assert mcp_server._progress_tracker is not None
+        assert mcp_server._anki_importer is not None
 
-            # Cleanup
-            mcp_server._session_manager = None
-            mcp_server._progress_tracker = None
-            mcp_server._anki_importer = None
+        # Cleanup
+        mcp_server._session_manager = None
+        mcp_server._progress_tracker = None
+        mcp_server._anki_importer = None
 
     def test_mcp_server_configured(self):
         """Test that MCP server is properly configured."""

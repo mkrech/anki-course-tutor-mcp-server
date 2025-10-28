@@ -80,7 +80,7 @@ class TestCompleteWorkflow:
     ):
         """Test complete workflow: start session -> learn cards -> track progress."""
         # Step 1: Create session
-        session_manager = SessionManager(temp_storage)
+        session_manager = SessionManager()
         card_ids = [card.id for card in sample_cards]
         session = session_manager.create_session(
             deck_name="Test Deck", card_ids=card_ids, mode="explain"
@@ -91,7 +91,7 @@ class TestCompleteWorkflow:
         assert len(session.card_ids) == 3
 
         # Step 2: Initialize progress tracker
-        progress_tracker = ProgressTracker(temp_storage.progress_dir)
+        progress_tracker = ProgressTracker()
         progress = Progress(
             session_id=session.session_id,
             deck_name=session.deck_name,
@@ -205,11 +205,8 @@ class TestCompleteWorkflow:
         progress.state = "completed"
         progress_tracker.save(progress, card_progress)
 
-        # Verify progress file exists
-        progress_file = (
-            Path(temp_storage.progress_dir) / f"{session.session_id}.json"
-        )
-        assert progress_file.exists()
+        # Verify progress is in memory
+        assert progress_tracker.exists(session.session_id)
 
         # Step 13: Load and verify progress
         loaded_progress, loaded_card_progress = progress_tracker.load(session.session_id)
@@ -223,13 +220,13 @@ class TestCompleteWorkflow:
         self, temp_storage, sample_cards
     ):
         """Test complete workflow in TEST mode (no explanations)."""
-        session_manager = SessionManager(temp_storage)
+        session_manager = SessionManager()
         card_ids = [card.id for card in sample_cards]
         session = session_manager.create_session(
             deck_name="Test Deck", card_ids=card_ids, mode="test"
         )
 
-        progress_tracker = ProgressTracker(temp_storage.progress_dir)
+        progress_tracker = ProgressTracker()
         progress = Progress(
             session_id=session.session_id,
             deck_name=session.deck_name,
@@ -329,7 +326,7 @@ class TestCompleteWorkflow:
         ]
 
         # Create and start session
-        session_manager = SessionManager(temp_storage)
+        session_manager = SessionManager()
         card_ids = [card.id for card in cards]
         session = session_manager.create_session(
             deck_name="Test", card_ids=card_ids, mode="test"
@@ -353,8 +350,7 @@ class TestCompleteWorkflow:
         resumed_session = session_manager.load_session(session.session_id)
         assert resumed_session.status == SessionStatus.PAUSED
 
-        session_manager.resume_session(resumed_session.session_id)  # Fix: Pass session_id string
-        assert resumed_session.status == SessionStatus.PAUSED  # Status not yet updated in this object
+        session_manager.resume_session(resumed_session.session_id)
 
         # Reload to get updated status
         resumed_session = session_manager.load_session(session.session_id)

@@ -1,29 +1,21 @@
-"""Session management - create, load, save, and list learning sessions."""
+"""Session management - create, load, and manage learning sessions in memory."""
 
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-from anki_course_tutor.config import StorageConfig
 from anki_course_tutor.models import LearningMode, Session, SessionStatus
 
 logger = logging.getLogger(__name__)
 
 
 class SessionManager:
-    """Manage learning session lifecycle and persistence."""
+    """Manage learning session lifecycle in memory (no persistence)."""
 
-    def __init__(self, config: StorageConfig):
-        """Initialize session manager with storage configuration.
-
-        Args:
-            config: Storage configuration with session directory path
-        """
-        self.config = config
-        self.session_dir = Path(config.sessions_dir)
-        self.session_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self):
+        """Initialize session manager with in-memory storage."""
+        self._sessions: dict[str, Session] = {}
+        logger.info("SessionManager initialized (in-memory mode)")
 
     def create_session(
         self,
@@ -65,52 +57,26 @@ class SessionManager:
             f"with {len(card_ids)} cards (mode: {mode})"
         )
 
-        # Save immediately
-        self.save_session(session)
+        # Store in memory
+        self._sessions[session_id] = session
 
         return session
 
     def save_session(self, session: Session) -> None:
-        """Save session to JSON file.
+        """Save session to memory.
 
         Args:
             session: Session to save
-
-        Raises:
-            IOError: If save fails
         """
-        session_file = self._get_session_file(session.session_id)
-
-        try:
-            # Update last_updated timestamp
-            session.last_updated = datetime.now()
-
-            # Convert to dict
-            session_dict = session.to_dict()
-
-            # Atomic write with backup
-            if session_file.exists() and self.config.backup_enabled:
-                backup_file = session_file.with_suffix(".json.bak")
-                session_file.rename(backup_file)
-
-            # Write new file
-            with open(session_file, "w", encoding="utf-8") as f:
-                json.dump(session_dict, f, indent=2, ensure_ascii=False)
-
-            logger.debug(f"Saved session {session.session_id} to {session_file}")
-
-        except Exception as e:
-            logger.error(f"Failed to save session {session.session_id}: {e}")
-            # Restore from backup if available
-            if self.config.backup_enabled:
-                backup_file = session_file.with_suffix(".json.bak")
-                if backup_file.exists():
-                    backup_file.rename(session_file)
-                    logger.info("Restored session from backup")
-            raise OSError(f"Failed to save session: {e}") from e
+        # Update last_updated timestamp
+        session.last_updated = datetime.now()
+        
+        # Store in memory
+        self._sessions[session.session_id] = session
+        logger.debug(f"Saved session {session.session_id} to memory")
 
     def load_session(self, session_id: str) -> Session:
-        """Load session from JSON file.
+        """Load session from memory.
 
         Args:
             session_id: ID of session to load
@@ -119,28 +85,14 @@ class SessionManager:
             Loaded Session object
 
         Raises:
-            FileNotFoundError: If session file not found
-            ValueError: If session data is invalid
+            FileNotFoundError: If session not found
         """
-        session_file = self._get_session_file(session_id)
-
-        if not session_file.exists():
+        if session_id not in self._sessions:
             raise FileNotFoundError(f"Session {session_id} not found")
 
-        try:
-            with open(session_file, encoding="utf-8") as f:
-                session_dict = json.load(f)
-
-            session = Session.from_dict(session_dict)
-            logger.debug(f"Loaded session {session_id}")
-            return session
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in session {session_id}: {e}")
-            raise ValueError(f"Invalid session data: {e}") from e
-        except Exception as e:
-            logger.error(f"Failed to load session {session_id}: {e}")
-            raise
+        session = self._sessions[session_id]
+        logger.debug(f"Loaded session {session_id} from memory")
+        return session
 
     def list_sessions(
         self,
@@ -160,46 +112,38 @@ class SessionManager:
         """
         sessions = []
 
-        for session_file in sorted(
-            self.session_dir.glob("*.json"),
-            key=lambda p: p.stat().st_mtime,
+        # Sort by last_updated (most recent first)
+        sorted_sessions = sorted(
+            self._sessions.values(),
+            key=lambda s: s.last_updated,
             reverse=True,
-        ):
-            if session_file.suffix == ".bak":
+        )
+
+        for session in sorted_sessions:
+            # Apply filters
+            if deck_name and session.deck_name != deck_name:
                 continue
 
-            try:
-                with open(session_file, encoding="utf-8") as f:
-                    session_dict = json.load(f)
-
-                # Apply filters
-                if deck_name and session_dict.get("deck_name") != deck_name:
-                    continue
-
-                if status and session_dict.get("status") != status.value:
-                    continue
-
-                # Add metadata
-                metadata = {
-                    "id": session_dict["session_id"],
-                    "deck_name": session_dict["deck_name"],
-                    "status": session_dict["status"],
-                    "mode": session_dict["mode"],
-                    "chapter": session_dict.get("chapter", ""),
-                    "current_index": session_dict["current_card_index"],
-                    "total_cards": len(session_dict["card_ids"]),
-                    "created_at": session_dict["created_at"],
-                    "last_updated": session_dict["last_updated"],
-                }
-
-                sessions.append(metadata)
-
-                if len(sessions) >= limit:
-                    break
-
-            except Exception as e:
-                logger.warning(f"Failed to read session {session_file.name}: {e}")
+            if status and session.status != status:
                 continue
+
+            # Add metadata
+            metadata = {
+                "id": session.session_id,
+                "deck_name": session.deck_name,
+                "status": session.status.value,
+                "mode": session.mode.value,
+                "chapter": session.chapter,
+                "current_index": session.current_card_index,
+                "total_cards": len(session.card_ids),
+                "created_at": session.created_at.isoformat(),
+                "last_updated": session.last_updated.isoformat(),
+            }
+
+            sessions.append(metadata)
+
+            if len(sessions) >= limit:
+                break
 
         logger.info(
             f"Found {len(sessions)} sessions"
@@ -210,31 +154,19 @@ class SessionManager:
         return sessions
 
     def delete_session(self, session_id: str) -> None:
-        """Delete a session file.
+        """Delete a session from memory.
 
         Args:
             session_id: ID of session to delete
 
         Raises:
-            FileNotFoundError: If session file not found
+            FileNotFoundError: If session not found
         """
-        session_file = self._get_session_file(session_id)
-
-        if not session_file.exists():
+        if session_id not in self._sessions:
             raise FileNotFoundError(f"Session {session_id} not found")
 
-        try:
-            session_file.unlink()
-            logger.info(f"Deleted session {session_id}")
-
-            # Also delete backup if exists
-            backup_file = session_file.with_suffix(".json.bak")
-            if backup_file.exists():
-                backup_file.unlink()
-
-        except Exception as e:
-            logger.error(f"Failed to delete session {session_id}: {e}")
-            raise
+        del self._sessions[session_id]
+        logger.info(f"Deleted session {session_id}")
 
     def resume_session(self, session_id: str) -> Session:
         """Resume a session and validate it can continue.
@@ -285,22 +217,11 @@ class SessionManager:
 
         logger.info(f"Paused session {session_id}")
 
-    def _get_session_file(self, session_id: str) -> Path:
-        """Get path to session file.
-
-        Args:
-            session_id: Session ID
-
-        Returns:
-            Path to session file
-        """
-        return self.session_dir / f"{session_id}.json"
-
     def cleanup_old_sessions(self, days: int = 30) -> int:
-        """Delete sessions older than specified days.
+        """Clean up old completed sessions from memory.
 
         Args:
-            days: Age threshold in days
+            days: Age threshold in days (for in-memory, we just clean completed ones)
 
         Returns:
             Number of sessions deleted
@@ -308,33 +229,18 @@ class SessionManager:
         from datetime import timedelta
 
         cutoff = datetime.now() - timedelta(days=days)
-        deleted_count = 0
+        to_delete = []
 
-        for session_file in self.session_dir.glob("*.json"):
-            if session_file.suffix == ".bak":
-                continue
+        for session_id, session in self._sessions.items():
+            # Only delete completed sessions older than cutoff
+            if session.status == SessionStatus.COMPLETED and session.last_updated < cutoff:
+                to_delete.append(session_id)
 
-            try:
-                # Check file modification time
-                mtime = datetime.fromtimestamp(session_file.stat().st_mtime)
+        for session_id in to_delete:
+            del self._sessions[session_id]
+            logger.debug(f"Cleaned up old session {session_id}")
 
-                if mtime < cutoff:
-                    # Load to check status
-                    with open(session_file, encoding="utf-8") as f:
-                        session_dict = json.load(f)
+        if to_delete:
+            logger.info(f"Cleaned up {len(to_delete)} old sessions")
 
-                    # Only delete completed sessions
-                    status = session_dict.get("status")
-                    if status == SessionStatus.COMPLETED.value:
-                        session_file.unlink()
-                        deleted_count += 1
-                        logger.debug(f"Deleted old session {session_file.stem}")
-
-            except Exception as e:
-                logger.warning(f"Failed to process session {session_file.name}: {e}")
-                continue
-
-        if deleted_count > 0:
-            logger.info(f"Cleaned up {deleted_count} old sessions")
-
-        return deleted_count
+        return len(to_delete)

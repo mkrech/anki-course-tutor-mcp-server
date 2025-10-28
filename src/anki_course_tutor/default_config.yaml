@@ -28,10 +28,10 @@ learning:
     require_user_review: true
 
 storage:
-  data_dir: ./data
-  sessions_dir: ./data/sessions
-  progress_dir: ./data/progress
-  backup_enabled: true
+  data_dir: ""
+  sessions_dir: ""
+  progress_dir: ""
+  backup_enabled: false
 
 logging:
   level: INFO

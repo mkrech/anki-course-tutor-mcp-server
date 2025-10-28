@@ -23,13 +23,7 @@ def main():
         )
 
         logger.info("Anki Course Tutor MCP Server starting...")
-        logger.info("Configuration loaded from config.yaml")
-        logger.info(f"Data directory: {config.storage.data_dir}")
-
-        # Create data directories if they don't exist
-        Path(config.storage.data_dir).mkdir(parents=True, exist_ok=True)
-        Path(config.storage.sessions_dir).mkdir(parents=True, exist_ok=True)
-        Path(config.storage.progress_dir).mkdir(parents=True, exist_ok=True)
+        logger.info("Configuration loaded (in-memory mode)")
 
         logger.info("Starting MCP server...")
 
