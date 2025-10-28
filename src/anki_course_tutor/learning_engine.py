@@ -554,7 +554,7 @@ class LearningEngine:
             logger.info("Learning session completed")
             return {
                 "state": "session_complete",
-                "message": "All cards completed!",
+                "message": "All cards completed! Great work! 🎉 Call end_session to finish.",
                 "stats": stats,
             }
 
