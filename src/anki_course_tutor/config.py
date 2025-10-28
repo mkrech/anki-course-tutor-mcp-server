@@ -69,11 +69,12 @@ class ConfigLoader:
     """Load and validate YAML configuration."""
 
     @staticmethod
-    def load(config_path: Path | str = "config.yaml") -> Config:
+    def load(config_path: Path | str | None = None) -> Config:
         """Load configuration from YAML file.
 
         Args:
-            config_path: Path to YAML configuration file
+            config_path: Path to YAML configuration file. If None, checks environment
+                        variable ANKI_COURSE_TUTOR_CONFIG, then defaults to config.yaml
 
         Returns:
             Validated Config object
@@ -82,6 +83,11 @@ class ConfigLoader:
             FileNotFoundError: If config file doesn't exist
             ValueError: If config is invalid
         """
+        import os
+        
+        if config_path is None:
+            config_path = os.environ.get("ANKI_COURSE_TUTOR_CONFIG", "config.yaml")
+        
         config_path = Path(config_path)
 
         if not config_path.exists():
