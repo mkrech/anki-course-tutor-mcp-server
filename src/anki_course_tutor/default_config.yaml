@@ -1,0 +1,38 @@
+anki:
+  connect_url: http://localhost:8765
+  connect_timeout: 30
+  retry_attempts: 3
+  use_anki_scheduler: true
+
+tutor:
+  personalities:
+    - type: normal
+      weight: 3
+    - type: pirate
+      weight: 1
+  modes:
+    explain:
+      enabled: true
+      max_sentences: 5
+    test:
+      enabled: true
+      show_correct_answer: true
+
+learning:
+  simple_srs:
+    retry_incorrect: true
+    shuffle_cards: false
+  evaluation:
+    case_sensitive: false
+    whitespace_sensitive: false
+    require_user_review: true
+
+storage:
+  data_dir: ./data
+  sessions_dir: ./data/sessions
+  progress_dir: ./data/progress
+  backup_enabled: true
+
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

@@ -74,19 +74,38 @@ class ConfigLoader:
 
         Args:
             config_path: Path to YAML configuration file. If None, checks environment
-                        variable ANKI_COURSE_TUTOR_CONFIG, then defaults to config.yaml
+                        variable ANKI_COURSE_TUTOR_CONFIG, then user config.yaml, 
+                        then falls back to package default
 
         Returns:
             Validated Config object
 
         Raises:
-            FileNotFoundError: If config file doesn't exist
             ValueError: If config is invalid
         """
         import os
+        from importlib import resources
         
         if config_path is None:
-            config_path = os.environ.get("ANKI_COURSE_TUTOR_CONFIG", "config.yaml")
+            # Priority: 1. Env var, 2. Local config.yaml, 3. Package default
+            config_path = os.environ.get("ANKI_COURSE_TUTOR_CONFIG")
+            
+            if config_path is None:
+                local_config = Path("config.yaml")
+                if local_config.exists():
+                    config_path = local_config
+                else:
+                    # Use package default
+                    try:
+                        # Python 3.9+ using importlib.resources
+                        if hasattr(resources, 'files'):
+                            config_path = resources.files('anki_course_tutor') / 'default_config.yaml'
+                        else:
+                            # Fallback for older Python
+                            with resources.path('anki_course_tutor', 'default_config.yaml') as p:
+                                config_path = p
+                    except Exception:
+                        raise FileNotFoundError("Could not locate default configuration")
         
         config_path = Path(config_path)
 
