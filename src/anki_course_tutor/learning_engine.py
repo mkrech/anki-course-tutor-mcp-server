@@ -138,18 +138,38 @@ class AnswerEvaluator:
         return True
 
     @staticmethod
-    def evaluate_multiple_choice(user_answer: str, correct_answer: str) -> bool:
-        """Evaluate Multiple Choice card answer.
+    def evaluate_all_in_one(
+        user_answer: str, correct_answer: str, variant_type: str | None = None
+    ) -> bool:
+        """Evaluate All-in-One card answer.
 
-        Exact match required after normalization.
+        Supports KPRIM (partial credit), MC (multiple options), SC (single option).
 
         Args:
-            user_answer: User's selected option
-            correct_answer: Correct option from card
+            user_answer: User's answer(s)
+            correct_answer: Correct answer from card
+            variant_type: AllInOne variant (KPRIM, MC, SC)
 
         Returns:
-            True if answers match
+            True if answer is correct (for KPRIM: >=3 correct points)
         """
+        if not variant_type:
+            variant_type = "MC"
+
+        # For KPRIM: user_answer format is "T/F,T/F,T/F,T/F" or similar
+        # Score: 1 point per correct answer (max 4)
+        if variant_type.upper() == "KPRIM":
+            user_parts = [p.strip().upper() for p in user_answer.split(",")]
+            correct_parts = [p.strip().upper() for p in correct_answer.split(",")]
+
+            if len(user_parts) != len(correct_parts):
+                return False
+
+            correct_count = sum(1 for u, c in zip(user_parts, correct_parts) if u == c)
+            # KPRIM: need >= 3 correct for pass (0-4 points, 3+ is pass)
+            return correct_count >= 3
+
+        # For MC/SC: use same logic as Multiple Choice
         return user_answer.strip().lower() == correct_answer.strip().lower()
 
 
@@ -471,9 +491,12 @@ class LearningEngine:
             "message": "Here's your next question:",
         }
 
-        # Add options for multiple choice
-        if self.current_card.type == CardType.MULTIPLE_CHOICE and self.current_card.options:
-            result["options"] = self.current_card.options
+        # Add options for AllInOne/MC cards
+        if self.current_card.type == CardType.ALL_IN_ONE and self.current_card.all_in_one_type == "MC" and self.current_card.fields:
+            # Extract options from fields
+            options = [v for k, v in self.current_card.fields.items() if k.startswith("Option")]
+            if options:
+                result["options"] = options
 
         return result
 
@@ -496,8 +519,10 @@ class LearningEngine:
             return self.evaluator.evaluate_basic(user_answer, correct_answer)
         elif card_type == CardType.CLOZE:
             return self.evaluator.evaluate_cloze(user_answer, correct_answer)
-        elif card_type == CardType.MULTIPLE_CHOICE:
-            return self.evaluator.evaluate_multiple_choice(user_answer, correct_answer)
+        elif card_type == CardType.ALL_IN_ONE:
+            return self.evaluator.evaluate_all_in_one(
+                user_answer, correct_answer, self.current_card.all_in_one_type
+            )
 
         return False
 

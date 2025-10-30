@@ -202,7 +202,10 @@ class CardConverter:
             elif model_name == "Cloze":
                 return CardConverter._convert_cloze(note_id, fields, deck, tags)
             elif "Multiple Choice" in model_name or "MC" in model_name:
-                return CardConverter._convert_multiple_choice(note_id, fields, deck, tags)
+                # Convert legacy Multiple Choice to AllInOne/MC variant
+                return CardConverter._convert_multiple_choice_to_all_in_one(note_id, fields, deck, tags)
+            elif model_name == "All-in-One":
+                return CardConverter._convert_all_in_one(note_id, fields, deck, tags)
             else:
                 # Try to convert as Basic (fallback)
                 logger.warning(f"Unknown model type '{model_name}', attempting Basic conversion")
@@ -274,10 +277,13 @@ class CardConverter:
         )
 
     @staticmethod
-    def _convert_multiple_choice(
+    def _convert_multiple_choice_to_all_in_one(
         note_id: str, fields: dict[str, Any], deck: str, tags: list[str]
     ) -> Card:
-        """Convert Multiple Choice note type to Card."""
+        """Convert Multiple Choice note type to AllInOne/MC variant.
+        
+        Legacy Multiple Choice cards are converted to AllInOne with MC variant.
+        """
         question = fields.get("Question", {}).get("value", "")
         option1 = fields.get("Option1", {}).get("value", "")
         option2 = fields.get("Option2", {}).get("value", "")
@@ -295,16 +301,80 @@ class CardConverter:
 
         options = [opt for opt in [option1, option2, option3, option4] if opt]
 
+        # Store all fields for AllInOne
+        extracted_fields = {
+            "Question": question,
+            "Answer": answer,
+        }
+        for i, opt in enumerate(options, 1):
+            extracted_fields[f"Option{i}"] = opt
+
         chapter = CardConverter._extract_chapter(tags)
 
         return Card(
             id=note_id,
-            type=CardType.MULTIPLE_CHOICE,
+            type=CardType.ALL_IN_ONE,
             question=question,
             answer=answer,
             deck=deck,
             chapter=chapter,
-            options=options,
+            fields=extracted_fields,
+            all_in_one_type="MC",  # Multiple Choice variant
+            tags=tags,
+        )
+
+    @staticmethod
+    def _convert_all_in_one(
+        note_id: str, fields: dict[str, Any], deck: str, tags: list[str]
+    ) -> Card:
+        """Convert All-in-One note type to Card.
+        
+        Supports KPRIM (K), MC (Multiple Choice), and SC (Single Choice) variants.
+        """
+        # Extract all fields
+        extracted_fields: dict[str, str] = {}
+        for field_name, field_info in fields.items():
+            if isinstance(field_info, dict):
+                value = field_info.get("value", "")
+            else:
+                value = str(field_info)
+            value = CardConverter._clean_html(value).strip()
+            if value:
+                extracted_fields[field_name] = value
+
+        # Use first field as question, second as answer
+        question = ""
+        answer = ""
+        all_in_one_type = "MC"  # Default to MC
+
+        # Try to detect variant type based on field patterns
+        field_names = list(extracted_fields.keys())
+        if field_names:
+            question = extracted_fields[field_names[0]]
+            if len(field_names) > 1:
+                answer = extracted_fields[field_names[1]]
+
+            # Try to detect KPRIM (typically has "K" in field or 4 true/false options)
+            if any("k" in name.lower() or "kprim" in name.lower() for name in field_names):
+                all_in_one_type = "KPRIM"
+            # Try to detect SC (single choice)
+            elif any("sc" in name.lower() or "single" in name.lower() for name in field_names):
+                all_in_one_type = "SC"
+            # Otherwise MC (multiple choice)
+            else:
+                all_in_one_type = "MC"
+
+        chapter = CardConverter._extract_chapter(tags)
+
+        return Card(
+            id=note_id,
+            type=CardType.ALL_IN_ONE,
+            question=question,
+            answer=answer,
+            deck=deck,
+            chapter=chapter,
+            fields=extracted_fields,
+            all_in_one_type=all_in_one_type,
             tags=tags,
         )
 

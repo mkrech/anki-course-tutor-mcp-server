@@ -9,7 +9,7 @@ class CardType(Enum):
 
     BASIC = "basic"
     CLOZE = "cloze"
-    MULTIPLE_CHOICE = "multiple_choice"
+    ALL_IN_ONE = "all_in_one"
 
 
 @dataclass
@@ -25,10 +25,12 @@ class Card:
     options: list[str] | None = None  # For multiple choice
     cloze_text: str | None = None  # For cloze cards
     tags: list[str] | None = None
+    fields: dict[str, str] | None = None  # For AllInOne cards
+    all_in_one_type: str | None = None  # KPRIM, MC, SC
 
     def __post_init__(self):
         """Validate card data."""
-        if self.type == CardType.MULTIPLE_CHOICE and not self.options:
-            raise ValueError("Multiple choice cards must have options")
         if self.type == CardType.CLOZE and not self.cloze_text:
             raise ValueError("Cloze cards must have cloze_text")
+        if self.type == CardType.ALL_IN_ONE and not self.fields:
+            raise ValueError("AllInOne cards must have fields")

@@ -46,10 +46,11 @@ def sample_cards():
         ),
         Card(
             id="card-3",
-            type=CardType.MULTIPLE_CHOICE,
+            type=CardType.ALL_IN_ONE,
             question="What is 2+2?",
             answer="4",
-            options=["3", "4", "5", "6"],
+            fields={"Question": "What is 2+2?", "Answer": "4", "Option1": "3", "Option2": "4", "Option3": "5", "Option4": "6"},
+            all_in_one_type="MC",
             deck="TestDeck",
         ),
     ]
@@ -76,10 +77,11 @@ def anki_cards():
         ),
         Card(
             id="3",
-            type=CardType.MULTIPLE_CHOICE,
+            type=CardType.ALL_IN_ONE,
             question="What is 2+2?",
             answer="4",
-            options=["3", "4", "5", "6"],
+            fields={"option_1": "3", "option_2": "4", "option_3": "5", "option_4": "6"},
+            all_in_one_type="MC",
             deck="TestDeck",
         ),
     ]
@@ -188,12 +190,17 @@ class TestAnswerEvaluator:
         result = AnswerEvaluator.evaluate_cloze("x³ + y², z", "x^3+y^2, z")
         assert result is True
 
-    def test_evaluate_multiple_choice(self):
-        """Test multiple choice evaluation."""
-        result = AnswerEvaluator.evaluate_multiple_choice("4", "4")
+    def test_evaluate_all_in_one_mc(self):
+        """Test MC variant (AllInOne) evaluation."""
+        # MC variant uses exact matching (normalized)
+        result = AnswerEvaluator.evaluate_all_in_one(
+            "4", "4", variant_type="MC"
+        )
         assert result is True
 
-        result = AnswerEvaluator.evaluate_multiple_choice("3", "4")
+        result = AnswerEvaluator.evaluate_all_in_one(
+            "3", "4", variant_type="MC"
+        )
         assert result is False
 
 
@@ -383,13 +390,13 @@ class TestLearningEngine:
         assert "stats" in result
 
     def test_multiple_choice_card(self, sample_session, sample_cards):
-        """Test presenting multiple choice card."""
+        """Test presenting AllInOne/MC card."""
         mc_card = sample_cards[2]
         engine = LearningEngine(sample_session, [mc_card], LearningMode.EXPLAIN)
 
         result = engine.start()
 
-        assert result["card_type"] == "multiple_choice"
+        assert result["card_type"] == "all_in_one"
         assert "options" in result
         assert len(result["options"]) == 4
 

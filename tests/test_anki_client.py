@@ -97,10 +97,11 @@ class TestCardConverter:
 
         assert card is not None
         assert card.id == "126"
-        assert card.type == CardType.MULTIPLE_CHOICE
+        assert card.type == CardType.ALL_IN_ONE
+        assert card.all_in_one_type == "MC"
         assert card.question == "What is 2+2?"
         assert card.answer == "4"
-        assert card.options == ["3", "4", "5", "6"]
+        assert "Option1" in card.fields
 
     def test_convert_unknown_model_fallback(self):
         """Test fallback to Basic for unknown models."""
