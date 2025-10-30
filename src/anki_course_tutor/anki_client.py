@@ -349,27 +349,38 @@ class CardConverter:
             if value:
                 extracted_fields[field_name] = value
 
-        # Use first field as question, second as answer
-        question = ""
-        answer = ""
+        # Extract specific fields by name
+        question = extracted_fields.get("Question", "")
+        answer = extracted_fields.get("Answers", "")  # KPRIM/MC/SC answers
         all_in_one_type = "MC"  # Default to MC
+        
+        # DEBUG
+        logger.debug(f"AllInOne conversion: question='{question[:50]}...', answer='{answer}'")
 
         # Try to detect variant type based on field patterns
         field_names = list(extracted_fields.keys())
-        if field_names:
-            question = extracted_fields[field_names[0]]
-            if len(field_names) > 1:
-                answer = extracted_fields[field_names[1]]
-
-            # Try to detect KPRIM (typically has "K" in field or 4 true/false options)
-            if any("k" in name.lower() or "kprim" in name.lower() for name in field_names):
-                all_in_one_type = "KPRIM"
-            # Try to detect SC (single choice)
-            elif any("sc" in name.lower() or "single" in name.lower() for name in field_names):
-                all_in_one_type = "SC"
-            # Otherwise MC (multiple choice)
-            else:
-                all_in_one_type = "MC"
+        
+        # Try to detect KPRIM (typically has "kprim" in QType field or field name)
+        if any("k" in name.lower() or "kprim" in name.lower() for name in field_names):
+            all_in_one_type = "KPRIM"
+        # Try to detect SC (single choice)
+        elif any("sc" in name.lower() or "single" in name.lower() for name in field_names):
+            all_in_one_type = "SC"
+        # Check QType field value if present (0=kprim, 1=mc, 2=sc)
+        else:
+            qtype_field = None
+            for fname in field_names:
+                if "qtype" in fname.lower():
+                    qtype_field = extracted_fields.get(fname, "").strip()
+                    break
+            
+            if qtype_field:
+                if qtype_field == "0":
+                    all_in_one_type = "KPRIM"
+                elif qtype_field == "1":
+                    all_in_one_type = "MC"
+                elif qtype_field == "2":
+                    all_in_one_type = "SC"
 
         chapter = CardConverter._extract_chapter(tags)
 
