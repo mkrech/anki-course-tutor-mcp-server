@@ -6,6 +6,53 @@
 **Completed:** 2025-10-27  
 **Author:** System
 
+## Why
+
+The custom `SimpleLearningScheduler` created separate review histories between the Tutor and Anki Desktop, preventing cross-platform sync and missing the benefits of Anki's proven SM-2 algorithm. This caused data inconsistency and suboptimal learning intervals.
+
+## What Changes
+
+**Complete migration to Anki's native scheduler:**
+- Added 3 new AnkiConnect API methods: `answer_card()`, `get_card_info()`, `get_reviews_of_cards()`
+- **BREAKING**: Removed SimpleLearningScheduler entirely (-109 lines)
+- Integrated card management directly into LearningEngine using session state
+- Submit all reviews to Anki's SM-2 scheduler after each answer
+- Added `use_anki_scheduler` configuration flag (default: true)
+- Updated session structure with `retry_queue` field
+- Made all scheduling operations async
+
+## Impact
+
+**Affected specs:**
+- anki-integration (added 3 scheduling API methods)
+- card-learning (removed SimpleLearningScheduler, integrated Anki scheduler)
+- session-management (updated session structure with retry_queue)
+
+**Affected code:**
+- `src/anki_course_tutor/anki_client.py` - Added scheduling methods
+- `src/anki_course_tutor/learning_engine.py` - Integrated Anki scheduler
+- `src/anki_course_tutor/scheduler.py` - **Deleted** (SimpleLearningScheduler removed)
+- `src/anki_course_tutor/config.py` - Added `use_anki_scheduler` flag
+- `src/anki_course_tutor/models/session.py` - Added `retry_queue` field
+- `src/anki_course_tutor/mcp_server.py` - Updated for async operations
+- Tests - Updated all tests, removed test_scheduler.py (100 tests passing, 74% coverage)
+
+**Benefits:**
+✅ Proven SM-2 spaced repetition algorithm  
+✅ Single review history across all platforms  
+✅ AnkiWeb/mobile sync enabled  
+✅ Reduced complexity (-109 lines)  
+✅ Better learning intervals
+
+**Trade-offs:**
+⚠️ Requires Anki Desktop running with AnkiConnect  
+⚠️ No offline learning (acceptable for MVP)  
+✅ Clear error messages when unavailable
+
+**Migration:**
+- Old sessions compatible (retry_queue defaults to empty list)
+- Requires AnkiConnect running when `use_anki_scheduler=true`
+
 ## Problem Statement
 
 The current system uses a simple custom scheduler (`SimpleLearningScheduler`) that doesn't leverage Anki's proven SM-2 spaced repetition algorithm. This leads to:
