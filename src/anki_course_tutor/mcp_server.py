@@ -120,6 +120,14 @@ async def start_session(deck_name: str, chapter: str = "", mode: str = "explain"
         if not cards:
             return {"error": f"No cards found in deck '{deck_name}'"}
 
+        # DEBUG: Log card types
+        logger.info(f"Imported {len(cards)} cards:")
+        card_types_info = []
+        for card in cards[:5]:  # Log first 5
+            info_str = f"Card {card.id}: type={card.type.value}, all_in_one_type={card.all_in_one_type}"
+            logger.info(f"  - {info_str}")
+            card_types_info.append(info_str)
+
         # Create session
         session = _session_manager.create_session(deck_name, chapter, learning_mode)
         session.card_ids = [card.id for card in cards]
@@ -138,6 +146,7 @@ async def start_session(deck_name: str, chapter: str = "", mode: str = "explain"
             "chapter": chapter,
             "mode": mode,
             "total_cards": len(cards),
+            "card_types_debug": card_types_info if card_types_info else [],
             "message": f"Session started with {len(cards)} cards. Call get_next_card to begin.",
         }
 

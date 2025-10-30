@@ -493,8 +493,14 @@ class LearningEngine:
 
         # Add options for AllInOne/MC cards
         if self.current_card.type == CardType.ALL_IN_ONE and self.current_card.all_in_one_type == "MC" and self.current_card.fields:
-            # Extract options from fields
-            options = [v for k, v in self.current_card.fields.items() if k.startswith("Option")]
+            # Extract options from fields - support multiple naming conventions
+            # Q_1, Q_2... or Option1, Option2... or Q1, Q2... etc
+            options = []
+            for k, v in sorted(self.current_card.fields.items()):
+                # Match Q_X, QX, OptionX, etc. patterns
+                if (k.startswith("Q_") or k.startswith("Q") or k.startswith("Option")) and any(c.isdigit() for c in k):
+                    options.append(v)
+            
             if options:
                 result["options"] = options
 

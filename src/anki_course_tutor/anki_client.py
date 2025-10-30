@@ -191,6 +191,9 @@ class CardConverter:
             fields = note.get("fields", {})
             tags = note.get("tags", [])
 
+            # DEBUG
+            logger.info(f"Converting note {note_id}: modelName='{model_name}'")
+
             # Extract deck name from note (if available)
             deck = ""
             if "deckName" in note:
@@ -198,13 +201,17 @@ class CardConverter:
 
             # Determine card type and convert
             if model_name == "Basic":
+                logger.debug(f"  → BASIC card")
                 return CardConverter._convert_basic(note_id, fields, deck, tags)
             elif model_name == "Cloze":
+                logger.debug(f"  → CLOZE card")
                 return CardConverter._convert_cloze(note_id, fields, deck, tags)
             elif "Multiple Choice" in model_name or "MC" in model_name:
                 # Convert legacy Multiple Choice to AllInOne/MC variant
+                logger.debug(f"  → MULTIPLE_CHOICE → ALL_IN_ONE/MC")
                 return CardConverter._convert_multiple_choice_to_all_in_one(note_id, fields, deck, tags)
-            elif model_name == "All-in-One":
+            elif "All-in-One" in model_name or "AllInOne" in model_name:
+                logger.debug(f"  → ALL_IN_ONE")
                 return CardConverter._convert_all_in_one(note_id, fields, deck, tags)
             else:
                 # Try to convert as Basic (fallback)
