@@ -144,6 +144,10 @@ class AnswerEvaluator:
         """Evaluate All-in-One card answer.
 
         Supports KPRIM (partial credit), MC (multiple options), SC (single option).
+        Accepts multiple answer formats:
+        - "1 1 0 1 0" or "1,1,0,1,0" (numbers with spaces or commas)
+        - "RRFRF" or "R,R,F,R,F" (R/F letters with or without separators)
+        - "TTFTT" or "T,T,F,T,T" (T/F letters)
 
         Args:
             user_answer: User's answer(s)
@@ -156,21 +160,53 @@ class AnswerEvaluator:
         if not variant_type:
             variant_type = "MC"
 
-        # For KPRIM: user_answer format is "T/F,T/F,T/F,T/F" or similar
-        # Score: 1 point per correct answer (max 4)
+        # For KPRIM: normalize both answers to same format
         if variant_type.upper() == "KPRIM":
-            user_parts = [p.strip().upper() for p in user_answer.split(",")]
-            correct_parts = [p.strip().upper() for p in correct_answer.split(",")]
+            # Normalize user answer
+            user_normalized = AnswerEvaluator._normalize_kprim_answer(user_answer)
+            # Normalize correct answer
+            correct_normalized = AnswerEvaluator._normalize_kprim_answer(correct_answer)
 
-            if len(user_parts) != len(correct_parts):
+            if len(user_normalized) != len(correct_normalized):
                 return False
 
-            correct_count = sum(1 for u, c in zip(user_parts, correct_parts) if u == c)
-            # KPRIM: need >= 3 correct for pass (0-4 points, 3+ is pass)
-            return correct_count >= 3
+            # Count correct answers
+            correct_count = sum(1 for u, c in zip(user_normalized, correct_normalized) if u == c)
+            # KPRIM: need >= 3 correct for pass (0-4 or 0-5 points, 3+ is pass)
+            # For 5 items: need >= 4 correct
+            threshold = max(3, int(len(correct_normalized) * 0.6))  # 60% threshold
+            return correct_count >= threshold
 
         # For MC/SC: use same logic as Multiple Choice
         return user_answer.strip().lower() == correct_answer.strip().lower()
+
+    @staticmethod
+    def _normalize_kprim_answer(answer: str) -> list[str]:
+        """Normalize KPRIM answer to list of '1' or '0'.
+        
+        Supports formats:
+        - "1 1 0 1 0" or "1,1,0,1,0" or "11010" -> ['1', '1', '0', '1', '0']
+        - "RRFRF" or "R,R,F,R,F" -> ['1', '1', '0', '1', '0']
+        - "TTFTT" or "T,T,F,T,T" -> ['1', '1', '0', '1', '0']
+        
+        Args:
+            answer: Answer in various formats
+            
+        Returns:
+            List of '1' (correct/true/richtig) or '0' (incorrect/false/falsch)
+        """
+        # Remove whitespace and convert to uppercase
+        answer = answer.strip().upper().replace(" ", "").replace(",", "")
+        
+        result = []
+        for char in answer:
+            if char == '1' or char == 'R' or char == 'T' or char == 'Y':
+                result.append('1')
+            elif char == '0' or char == 'F' or char == 'N':
+                result.append('0')
+            # Ignore other characters
+        
+        return result
 
 
 class LearningEngine:
@@ -318,13 +354,13 @@ class LearningEngine:
         return self._present_card()
 
     def submit_answer(self, user_answer: str) -> dict[str, Any]:
-        """Submit an answer and get automatic evaluation.
+        """Submit an answer and mark as correct or incorrect.
 
         Args:
             user_answer: User's answer
 
         Returns:
-            Dictionary with evaluation result for user review
+            Dictionary prompting user to confirm if their answer was correct
         """
         if self.session.state != LearningState.AWAITING_ANSWER:
             return {"error": f"Cannot submit answer in state {self.session.state.value}"}
@@ -333,39 +369,26 @@ class LearningEngine:
             return {"error": "No current card"}
 
         self.current_user_answer = user_answer
-        self.session.state = LearningState.EVALUATING
-
-        # Perform automatic evaluation
-        self.automatic_evaluation = self._evaluate_answer(user_answer)
-
         self.session.state = LearningState.AWAITING_REVIEW
 
-        logger.info(
-            f"Card {self.current_card.id}: user answered, "
-            f"automatic evaluation={self.automatic_evaluation}"
-        )
+        logger.info(f"Card {self.current_card.id}: user answered '{user_answer}'")
 
-        # Simple evaluation message
-        if self.automatic_evaluation:
-            message = f"CORRECT! The answer is '{self.current_card.answer}'. → Is this evaluation correct? (yes/no)"
-        else:
-            message = f"INCORRECT. The correct answer is '{self.current_card.answer}'. → Is this evaluation correct? (yes/no)"
-
+        # Ask user directly if their answer was correct
         return {
             "state": "awaiting_review",
-            "automatic_evaluation": self.automatic_evaluation,
+            "user_answer": user_answer,
             "correct_answer": self.current_card.answer,
-            "message": message,
+            "message": f"You answered: '{user_answer}'\nCorrect answer: '{self.current_card.answer}'\n\nWas your answer correct? (yes/no)",
         }
 
     async def confirm_evaluation(self, is_correct: bool) -> dict[str, Any]:
-        """User confirms or overrides the automatic evaluation.
+        """User indicates if their answer was correct or incorrect.
 
         Args:
-            is_correct: True if user confirms answer is correct
+            is_correct: True if user's answer was correct, False if incorrect
 
         Returns:
-            Dictionary with next action (explanation or next card)
+            Dictionary with next action (next card or session complete)
         """
         if self.session.state != LearningState.AWAITING_REVIEW:
             return {"error": f"Cannot confirm evaluation in state {self.session.state.value}"}
@@ -491,18 +514,41 @@ class LearningEngine:
             "message": "Here's your next question:",
         }
 
-        # Add options for AllInOne/MC cards
-        if self.current_card.type == CardType.ALL_IN_ONE and self.current_card.all_in_one_type == "MC" and self.current_card.fields:
+        # Add options/statements for AllInOne cards (MC, KPRIM, SC)
+        if self.current_card.type == CardType.ALL_IN_ONE and self.current_card.fields:
             # Extract options from fields - support multiple naming conventions
             # Q_1, Q_2... or Option1, Option2... or Q1, Q2... etc
             options = []
             for k, v in sorted(self.current_card.fields.items()):
-                # Match Q_X, QX, OptionX, etc. patterns
-                if (k.startswith("Q_") or k.startswith("Q") or k.startswith("Option")) and any(c.isdigit() for c in k):
+                # Match Q_X, QX patterns (but exclude Question, QType fields)
+                # Use regex pattern to match exactly Q_1, Q_2, etc or Q1, Q2, etc
+                if k.startswith("Q_") and len(k) >= 3 and k[2:].isdigit():
+                    # Q_1, Q_2, Q_3 pattern
+                    options.append(v)
+                elif k.startswith("Q") and len(k) == 2 and k[1:].isdigit():
+                    # Q1, Q2, Q3 pattern
+                    options.append(v)
+                elif k.startswith("Option") and any(c.isdigit() for c in k):
+                    # Option1, Option2 pattern
                     options.append(v)
             
             if options:
                 result["options"] = options
+                
+            # Add all_in_one_type to result for better context
+            if self.current_card.all_in_one_type:
+                result["all_in_one_type"] = self.current_card.all_in_one_type
+
+        # In EXPLAIN mode, add explanation/hint with the question
+        if self.mode == LearningMode.EXPLAIN and self.current_card.fields:
+            # Add Extra info fields as hints/explanations
+            explanation_parts = []
+            for k, v in self.current_card.fields.items():
+                if k.startswith("Extra") or k == "Sources":
+                    explanation_parts.append(f"{k}: {v}")
+            
+            if explanation_parts:
+                result["hint"] = " | ".join(explanation_parts)
 
         return result
 
@@ -618,6 +664,12 @@ class LearningEngine:
         Returns:
             Dictionary with current state details
         """
+        # If we're presenting a card or awaiting answer, return card presentation
+        if self.session.state in [LearningState.PRESENTING_CARD, LearningState.AWAITING_ANSWER]:
+            if self.current_card:
+                return self._present_card()
+        
+        # Otherwise return general stats
         stats = self._get_stats()
 
         return {

@@ -227,7 +227,6 @@ async def get_next_card() -> dict[str, Any]:
         else:
             result = _learning_engine.get_current_state()
 
-        logger.debug(f"get_next_card: state={result.get('state')}")
         return result
 
     except Exception as e:

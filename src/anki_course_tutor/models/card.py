@@ -32,5 +32,8 @@ class Card:
         """Validate card data."""
         if self.type == CardType.CLOZE and not self.cloze_text:
             raise ValueError("Cloze cards must have cloze_text")
+        # Relaxed validation: warn but don't fail for missing fields
         if self.type == CardType.ALL_IN_ONE and not self.fields:
-            raise ValueError("AllInOne cards must have fields")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"AllInOne card {self.id} has no fields - this may cause issues")

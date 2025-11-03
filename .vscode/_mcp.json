@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "anki": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/mkrech/anki-mcp-server",
+        "anki-mcp-server"
+      ]
+    },
+    "anki-course-tutor": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/mkrech/anki-course-tutor-mcp-server",
+        "anki-course-tutor"
+      ]
+    }
+  }
+}

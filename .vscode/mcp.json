@@ -1,18 +1,20 @@
 {
   "servers": {
     "anki": {
-      "command": "uvx",
+      "command": "uv",
       "args": [
-        "--from",
-        "git+https://github.com/mkrech/anki-mcp-server",
+        "--directory",
+        "/Users/michaelkrech/_work/anki-mcp-server",
+        "run",
         "anki-mcp-server"
       ]
     },
     "anki-course-tutor": {
-      "command": "uvx",
+      "command": "uv",
       "args": [
-        "--from",
-        "git+https://github.com/mkrech/anki-course-tutor-mcp-server",
+        "--directory",
+        "/Users/michaelkrech/_work/anki-course-tutor-mcp-server",
+        "run",
         "anki-course-tutor"
       ]
     }

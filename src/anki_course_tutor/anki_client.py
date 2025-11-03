@@ -353,9 +353,6 @@ class CardConverter:
         question = extracted_fields.get("Question", "")
         answer = extracted_fields.get("Answers", "")  # KPRIM/MC/SC answers
         all_in_one_type = "MC"  # Default to MC
-        
-        # DEBUG
-        logger.debug(f"AllInOne conversion: question='{question[:50]}...', answer='{answer}'")
 
         # Try to detect variant type based on field patterns
         field_names = list(extracted_fields.keys())
