@@ -4,6 +4,8 @@ description: Complete workflow for learning with Anki Course Tutor MCP Server.
 
 $ARGUMENTS
 <!-- LEARNING-WORKFLOW:START -->
+**Language**: Always communicate in German (Deutsch) with the user.
+
 **Guardrails**
 - Ensure Anki Desktop is running with AnkiConnect addon installed before starting
 - Always confirm automatic evaluations - be honest about correctness

@@ -261,16 +261,18 @@ async def submit_answer(answer: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def confirm_evaluation(is_correct: bool) -> dict[str, Any]:
-    """Confirm or override the automatic evaluation.
+    """Confirm whether your answer was correct or incorrect.
 
-    The system shows its evaluation of your answer. You need to confirm if this evaluation is correct.
+    The system shows its evaluation of your answer. You need to confirm the correctness of YOUR ANSWER.
     
     Examples:
-    - System says "INCORRECT" and you agree → is_correct: True (evaluation is right)
-    - System says "INCORRECT" but you think your answer was right → is_correct: False (evaluation is wrong)
+    - System says "INCORRECT" and you agree your answer was wrong → is_correct: False (your answer was incorrect)
+    - System says "CORRECT" and you agree your answer was right → is_correct: True (your answer was correct)
+    - System says "INCORRECT" but you think your answer was actually right → is_correct: True (your answer was correct)
+    - System says "CORRECT" but you think your answer was actually wrong → is_correct: False (your answer was incorrect)
 
     Args:
-        is_correct: True if the system's evaluation is correct, False if you disagree with it
+        is_correct: True if YOUR answer was correct, False if YOUR answer was incorrect
 
     Returns:
         Dictionary with next action (next card or explanation)
