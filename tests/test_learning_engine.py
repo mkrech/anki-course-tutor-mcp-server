@@ -260,7 +260,7 @@ class TestLearningEngine:
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
     async def test_confirm_evaluation_correct(self, sample_session, sample_cards):
-        """Test confirming a correct evaluation."""
+        """Test confirming a correct evaluation in EXPLAIN mode."""
         engine = LearningEngine(sample_session, sample_cards, LearningMode.EXPLAIN)
         engine.start()
 
@@ -270,17 +270,24 @@ class TestLearningEngine:
 
         result = await engine.confirm_evaluation(is_correct=True)
 
-        # Should move to next card
-        assert result["state"] == "awaiting_answer"
-        assert result["card_id"] == "card-2"
+        # In EXPLAIN mode, should enter explaining state even for correct answers
+        assert result["state"] == "explaining"
+        assert result["result"] == "correct"
+        assert engine.session.state == LearningState.EXPLAINING
+        assert result["card_id"] == first_card_id
         
-        # Check stats to verify completion
+        # Check stats to verify completion (card should be marked complete)
         stats = engine._get_stats()
         assert stats["completed_cards"] == 1
-
-        # Should show result
-        assert result["previous_result"] == "correct"
-        assert result["previous_card_id"] == first_card_id
+        
+        # Should be able to get explanation
+        explanation = await engine.get_explanation()
+        assert "explanation" in explanation
+        
+        # After explanation, move to next card
+        next_result = engine.next_card_after_explanation()
+        assert next_result["state"] == "awaiting_answer"
+        assert next_result["card_id"] == "card-2"
 
     async def test_confirm_evaluation_incorrect_explain_mode(self, sample_session, sample_cards):
         """Test confirming incorrect in EXPLAIN mode."""
@@ -391,6 +398,57 @@ class TestLearningEngine:
         assert engine.session.state == LearningState.SESSION_COMPLETE
         assert "stats" in result
 
+    async def test_last_card_incorrect_explain_mode(self, sample_session, sample_cards):
+        """Test that explanation is available for last card when incorrect in EXPLAIN mode."""
+        engine = LearningEngine(sample_session, sample_cards[:1], LearningMode.EXPLAIN)
+        engine.start()
+        
+        # Submit wrong answer for the only card
+        engine.submit_answer("Wrong answer")
+        
+        # Confirm evaluation as incorrect
+        result = await engine.confirm_evaluation(is_correct=False)
+        
+        # Should enter EXPLAINING state, NOT session_complete
+        assert result["state"] == "explaining"
+        assert engine.session.state == LearningState.EXPLAINING
+        assert result["result"] == "incorrect"
+        
+        # Should be able to get explanation
+        explanation_result = await engine.get_explanation()
+        assert explanation_result["state"] == "explaining"
+        assert "explanation" in explanation_result
+        
+        # After explanation, move to next (which completes the session since it's retry queue)
+        next_result = engine.next_card_after_explanation()
+        # Now it should show session complete or the retry card
+        assert next_result["state"] in ["session_complete", "awaiting_answer"]
+
+    async def test_last_card_correct_explain_mode(self, sample_session, sample_cards):
+        """Test that explanation is available for last card when correct in EXPLAIN mode."""
+        engine = LearningEngine(sample_session, sample_cards[:1], LearningMode.EXPLAIN)
+        engine.start()
+        
+        # Submit correct answer for the only card
+        engine.submit_answer("A programming language")
+        
+        # Confirm evaluation as correct
+        result = await engine.confirm_evaluation(is_correct=True)
+        
+        # Should enter EXPLAINING state, NOT session_complete
+        assert result["state"] == "explaining"
+        assert engine.session.state == LearningState.EXPLAINING
+        assert result["result"] == "correct"
+        
+        # Should be able to get explanation
+        explanation_result = await engine.get_explanation()
+        assert explanation_result["state"] == "explaining"
+        assert "explanation" in explanation_result
+        
+        # After explanation, move to next (which completes the session)
+        next_result = engine.next_card_after_explanation()
+        assert next_result["state"] == "session_complete"
+
     def test_multiple_choice_card(self, sample_session, sample_cards):
         """Test presenting AllInOne/MC card."""
         mc_card = sample_cards[2]
@@ -491,7 +549,9 @@ class TestAnkiSchedulerIntegration:
 
         # Should have called answer_card with ease=4
         mock_anki_client.answer_card.assert_awaited_once_with(card_id=1, ease=4)
-        assert result["state"] == "awaiting_answer"
+        # In EXPLAIN mode, should go to explaining state
+        assert result["state"] == "explaining"
+        assert result["result"] == "correct"
 
     async def test_confirm_evaluation_submits_to_anki_incorrect(
         self, sample_session, anki_cards
@@ -741,6 +801,39 @@ class TestKPRIMSupport:
         assert result["state"] == "awaiting_review"
         assert result["user_answer"] == "RRFRF"
         assert result["correct_answer"] == "1 1 0 1 0"
+
+    def test_kprim_normalization_message(self):
+        """Test that KPRIM answers show normalization info when formats differ."""
+        kprim_card = Card(
+            id="kprim-2",
+            type=CardType.ALL_IN_ONE,
+            question="KPRIM",
+            answer="1 1 0 1 0",
+            fields={"Q_1": "A", "Q_2": "B", "Q_3": "C", "Q_4": "D", "Q_5": "E", "all_in_one_type": "KPRIM"},
+            all_in_one_type="KPRIM",
+            deck="Test",
+        )
+        
+        session = Session(
+            session_id="test", 
+            deck_name="Test", 
+            card_ids=["kprim-2"], 
+            mode=LearningMode.EXPLAIN, 
+            status=SessionStatus.IN_PROGRESS
+        )
+        engine = LearningEngine(session, [kprim_card], LearningMode.EXPLAIN)
+        engine.start()
+        
+        # Submit answer without spaces (should match "1 1 0 1 0")
+        result = engine.submit_answer("11010")
+        
+        assert result["state"] == "awaiting_review"
+        assert result["user_answer"] == "11010"
+        assert result["correct_answer"] == "1 1 0 1 0"
+        # Should mention normalization since formats differ but are equivalent
+        assert "normalization" in result["message"].lower()
+        assert "1 1 0 1 0" in result["message"]
+
 
     def test_options_extraction_qn_format(self):
         """Test options extraction with Qn format (no underscore)."""

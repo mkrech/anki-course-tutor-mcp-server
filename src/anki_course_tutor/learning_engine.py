@@ -373,12 +373,27 @@ class LearningEngine:
 
         logger.info(f"Card {self.current_card.id}: user answered '{user_answer}'")
 
+        # For KPRIM cards, check if normalized answers match
+        correct_answer = self.current_card.answer
+        message = f"You answered: '{user_answer}'\nCorrect answer: '{correct_answer}'\n\nIs your answer correct? (yes/no)"
+        
+        # If this is a KPRIM/AllInOne card, add normalization info
+        if self.current_card.type == CardType.ALL_IN_ONE:
+            variant_type = self.current_card.all_in_one_type
+            if variant_type and variant_type.upper() == "KPRIM":
+                user_normalized = AnswerEvaluator._normalize_kprim_answer(user_answer)
+                correct_normalized = AnswerEvaluator._normalize_kprim_answer(correct_answer)
+                
+                # If normalized forms match, they're the same answer (just different formatting)
+                if user_normalized == correct_normalized:
+                    message = f"You answered: '{user_answer}'\nCorrect answer: '{correct_answer}'\n\n(Note: Your answer matches after normalization - same as '{' '.join(user_normalized)}')\n\nIs your answer correct? (yes/no)"
+
         # Ask user directly if their answer was correct
         return {
             "state": "awaiting_review",
             "user_answer": user_answer,
-            "correct_answer": self.current_card.answer,
-            "message": f"You answered: '{user_answer}'\nCorrect answer: '{self.current_card.answer}'\n\nWas your answer correct? (yes/no)",
+            "correct_answer": correct_answer,
+            "message": message,
         }
 
     async def confirm_evaluation(self, is_correct: bool) -> dict[str, Any]:
@@ -428,18 +443,21 @@ class LearningEngine:
         previous_card_id = self.current_card.id
         previous_answer = self.current_card.answer
 
-        # In EXPLAIN mode, show explanation if incorrect (but keep current card for context)
-        if not is_correct and self.mode == LearningMode.EXPLAIN:
+        # In EXPLAIN mode, always show explanation (regardless of correctness)
+        if self.mode == LearningMode.EXPLAIN:
             self.session.state = LearningState.EXPLAINING
+            # Sync session state for persistence
+            self._sync_session_state()
+            result_text = "correct" if is_correct else "incorrect"
             return {
                 "state": "explaining",
-                "result": "incorrect",
+                "result": result_text,
                 "card_id": self.current_card.id,
                 "correct_answer": previous_answer,
-                "message": f"The correct answer is '{previous_answer}'. Let me explain why...",
+                "message": f"Your answer was {result_text}. The correct answer is '{previous_answer}'. Call get_explanation to learn more.",
             }
 
-        # In TEST mode or correct answer, move to next card but show result
+        # In TEST mode, move to next card but show result
         next_card_result = self._next_card()
 
         # Add result information for user feedback
