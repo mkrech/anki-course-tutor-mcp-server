@@ -16,7 +16,8 @@ AI-powered learning system that combines Anki's spaced repetition with AI-driven
 - 🔄 **Anki Scheduler Integration** - Submit reviews directly to Anki's spaced repetition system
 - 🎯 **Flexible Modes** - Explain mode (with AI explanations) or Test mode (assessment only)
 - 🔌 **11 MCP Tools** - Complete learning workflow via chat interface
-- 📝 **3 Card Types** - Support for Basic, Cloze, and Multiple Choice cards
+- 📝 **Multiple Card Types** - Basic, Cloze, Multiple Choice (MC), Single Choice (SC), and KPRIM
+- 🎨 **Flexible Answer Formats** - Accept R/F, T/F, Y/N, or 1/0 for KPRIM questions
 
 ## Prerequisites
 
@@ -151,6 +152,42 @@ AI: Let me explain:
     While "hour" and "time" are related, we use "What time" as the 
     standard expression. Think of "time" as the specific point on 
     the clock, while "hour" is more about duration.
+```
+
+### KPRIM Questions with Flexible Formats
+
+```
+You: Next card
+AI: 📝 Card 5/150
+    Question: Welche Aussagen über Conditional Parameterization sind korrekt?
+    
+    Options:
+    Q_1: Sie ist die graphische Darstellung von P(G|I)
+    Q_2: Sie verwendet bedingte Wahrscheinlichkeitstabellen
+    Q_3: Sie ist nur für diskrete Variablen definiert
+    Q_4: Sie ermöglicht effiziente Inferenz in Bayesianischen Netzen
+    Q_5: Sie ersetzt die Chain Rule vollständig
+    
+    Hint: Sources: Folie 5 | Extra: Conditional Parameterization ist 
+          die graphische Darstellung von P(G|I)
+
+You: RRFRF
+AI: You answered: 'RRFRF'
+    Correct answer: '1 1 0 1 0'
+    
+    Was your answer correct? (yes/no)
+
+You: yes
+AI: ✅ Correct! Progress: 5/150 cards completed
+```
+
+**Supported KPRIM answer formats:**
+- **R/F** (German): `RRFRF`, `R,R,F,R,F`, `R R F R F`
+- **T/F** (English): `TTFTT`, `T,T,F,T,T`, `T T F T T`
+- **Y/N**: `YYNYN`, `Y,Y,N,Y,N`, `Y Y N Y N`
+- **1/0** (Numeric): `11010`, `1,1,0,1,0`, `1 1 0 1 0`
+
+All formats are case-insensitive and separator-agnostic.
 ```
 
 ## 🏗️ Architecture

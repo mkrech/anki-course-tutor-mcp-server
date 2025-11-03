@@ -243,7 +243,8 @@ class TestLearningEngine:
         result = engine.submit_answer("A programming language")
 
         assert result["state"] == "awaiting_review"
-        assert result["automatic_evaluation"] is True
+        assert "user_answer" in result
+        assert "correct_answer" in result
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
     def test_submit_answer_incorrect(self, sample_session, sample_cards):
@@ -254,7 +255,8 @@ class TestLearningEngine:
         result = engine.submit_answer("Wrong answer")
 
         assert result["state"] == "awaiting_review"
-        assert result["automatic_evaluation"] is False
+        assert "user_answer" in result
+        assert "correct_answer" in result
         assert engine.session.state == LearningState.AWAITING_REVIEW
 
     async def test_confirm_evaluation_correct(self, sample_session, sample_cards):
@@ -448,9 +450,9 @@ class TestLearningEngine:
         state = engine.get_current_state()
 
         assert state["state"] == "awaiting_answer"
-        assert state["current_card_id"] == "card-1"
-        assert state["mode"] == "explain"
-        assert "stats" in state
+        assert state["card_id"] == "card-1"
+        assert "question" in state
+        assert "message" in state
 
     async def test_invalid_state_transitions(self, sample_session, sample_cards):
         """Test that invalid state transitions are rejected."""
@@ -573,3 +575,202 @@ class TestAnkiSchedulerIntegration:
         # Should return error about invalid card ID
         assert "error" in result
         assert "Invalid card ID" in result["error"]
+
+
+class TestKPRIMSupport:
+    """Tests for KPRIM/AllInOne card support improvements."""
+
+    def test_normalize_kprim_answer_rf_format(self):
+        """Test R/F format normalization."""
+        assert AnswerEvaluator._normalize_kprim_answer("RRFRF") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("R,R,F,R,F") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("R R F R F") == ['1', '1', '0', '1', '0']
+
+    def test_normalize_kprim_answer_tf_format(self):
+        """Test T/F format normalization."""
+        assert AnswerEvaluator._normalize_kprim_answer("TTFTT") == ['1', '1', '0', '1', '1']
+        assert AnswerEvaluator._normalize_kprim_answer("T,T,F,T,T") == ['1', '1', '0', '1', '1']
+
+    def test_normalize_kprim_answer_yn_format(self):
+        """Test Y/N format normalization."""
+        assert AnswerEvaluator._normalize_kprim_answer("YYNYN") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("Y;Y;N;Y;N") == ['1', '1', '0', '1', '0']
+
+    def test_normalize_kprim_answer_numeric_format(self):
+        """Test numeric format normalization."""
+        assert AnswerEvaluator._normalize_kprim_answer("11010") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("1,1,0,1,0") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("1 1 0 1 0") == ['1', '1', '0', '1', '0']
+
+    def test_normalize_kprim_answer_case_insensitive(self):
+        """Test case insensitive normalization."""
+        assert AnswerEvaluator._normalize_kprim_answer("rrfrf") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("RrFrF") == ['1', '1', '0', '1', '0']
+        assert AnswerEvaluator._normalize_kprim_answer("tTfTt") == ['1', '1', '0', '1', '1']
+
+    def test_present_card_with_options(self):
+        """Test card presentation includes options for AllInOne cards."""
+        kprim_card = Card(
+            id="kprim-1",
+            type=CardType.ALL_IN_ONE,
+            question="Welche Aussagen sind korrekt?",
+            answer="1 1 0 1 0",
+            fields={
+                "Question": "Welche Aussagen sind korrekt?",
+                "Q_1": "Aussage 1 ist richtig",
+                "Q_2": "Aussage 2 ist richtig",
+                "Q_3": "Aussage 3 ist falsch",
+                "Q_4": "Aussage 4 ist richtig",
+                "Q_5": "Aussage 5 ist falsch",
+                "QType": "KPRIM",
+            },
+            all_in_one_type="KPRIM",
+            deck="TestDeck",
+        )
+        
+        session = Session(
+            session_id="test", 
+            deck_name="TestDeck", 
+            card_ids=["kprim-1"], 
+            mode=LearningMode.EXPLAIN, 
+            status=SessionStatus.IN_PROGRESS
+        )
+        engine = LearningEngine(session, [kprim_card], LearningMode.EXPLAIN)
+        
+        result = engine.start()
+        
+        assert "options" in result
+        assert len(result["options"]) == 5
+        assert result["options"][0] == "Aussage 1 ist richtig"
+        assert result["options"][1] == "Aussage 2 ist richtig"
+        assert result["all_in_one_type"] == "KPRIM"
+
+    def test_present_card_with_hints_explain_mode(self):
+        """Test card presentation includes hints in EXPLAIN mode."""
+        card_with_hints = Card(
+            id="hint-1",
+            type=CardType.ALL_IN_ONE,
+            question="Test question",
+            answer="1 1 0",
+            fields={
+                "Question": "Test question",
+                "Q_1": "Option 1",
+                "Q_2": "Option 2",
+                "Q_3": "Option 3",
+                "Sources": "Folie 5",
+                "Extra": "Zusatzinfo hier",
+                "Extra 1": "Noch mehr Info",
+            },
+            all_in_one_type="MC",
+            deck="TestDeck",
+        )
+        
+        session = Session(
+            session_id="test", 
+            deck_name="TestDeck", 
+            card_ids=["hint-1"], 
+            mode=LearningMode.EXPLAIN, 
+            status=SessionStatus.IN_PROGRESS
+        )
+        engine = LearningEngine(session, [card_with_hints], LearningMode.EXPLAIN)
+        
+        result = engine.start()
+        
+        assert "hint" in result
+        assert "Sources: Folie 5" in result["hint"]
+        assert "Extra: Zusatzinfo hier" in result["hint"]
+        assert "Extra 1: Noch mehr Info" in result["hint"]
+
+    def test_present_card_no_hints_test_mode(self):
+        """Test card presentation excludes hints in TEST mode."""
+        card_with_hints = Card(
+            id="hint-1",
+            type=CardType.ALL_IN_ONE,
+            question="Test question",
+            answer="1 1 0",
+            fields={
+                "Question": "Test question",
+                "Q_1": "Option 1",
+                "Q_2": "Option 2",
+                "Q_3": "Option 3",
+                "Sources": "Folie 5",
+                "Extra": "Should not appear",
+            },
+            all_in_one_type="MC",
+            deck="TestDeck",
+        )
+        
+        session = Session(
+            session_id="test", 
+            deck_name="TestDeck", 
+            card_ids=["hint-1"], 
+            mode=LearningMode.TEST, 
+            status=SessionStatus.IN_PROGRESS
+        )
+        engine = LearningEngine(session, [card_with_hints], LearningMode.TEST)
+        
+        result = engine.start()
+        
+        assert "hint" not in result
+
+    def test_evaluate_all_in_one_with_normalization(self):
+        """Test AllInOne evaluation uses normalization."""
+        kprim_card = Card(
+            id="kprim-1",
+            type=CardType.ALL_IN_ONE,
+            question="KPRIM",
+            answer="1 1 0 1 0",
+            fields={"Q_1": "A", "Q_2": "B", "Q_3": "C", "Q_4": "D", "Q_5": "E"},
+            all_in_one_type="KPRIM",
+            deck="Test",
+        )
+        
+        session = Session(
+            session_id="test", 
+            deck_name="Test", 
+            card_ids=["kprim-1"], 
+            mode=LearningMode.EXPLAIN, 
+            status=SessionStatus.IN_PROGRESS
+        )
+        engine = LearningEngine(session, [kprim_card], LearningMode.EXPLAIN)
+        engine.start()
+        
+        # Submit answer in R/F format
+        result = engine.submit_answer("RRFRF")
+        
+        assert result["state"] == "awaiting_review"
+        assert result["user_answer"] == "RRFRF"
+        assert result["correct_answer"] == "1 1 0 1 0"
+
+    def test_options_extraction_qn_format(self):
+        """Test options extraction with Qn format (no underscore)."""
+        card_qn = Card(
+            id="qn-1",
+            type=CardType.ALL_IN_ONE,
+            question="Test",
+            answer="1 1 0",
+            fields={
+                "Question": "Test",
+                "Q1": "Option 1",
+                "Q2": "Option 2",
+                "Q3": "Option 3",
+            },
+            all_in_one_type="MC",
+            deck="Test",
+        )
+        
+        session = Session(
+            session_id="test", 
+            deck_name="Test", 
+            card_ids=["qn-1"], 
+            mode=LearningMode.EXPLAIN, 
+            status=SessionStatus.IN_PROGRESS
+        )
+        engine = LearningEngine(session, [card_qn], LearningMode.EXPLAIN)
+        
+        result = engine.start()
+        
+        assert "options" in result
+        assert len(result["options"]) == 3
+        assert result["options"][0] == "Option 1"
+        assert result["options"][1] == "Option 2"
